@@ -12,8 +12,6 @@ pub enum Progress {
     Started,
     /// Packet `.0` was transmitted/received.
     Packet(u8),
-    NAK,
-    Unknown,
 }
 
 /// Type for progress callbacks.
@@ -21,3 +19,6 @@ pub type ProgressFn = fn(Progress);
 
 /// Noop progress callback.
 pub fn noop(_: Progress) {  }
+
+
+// to use, change methods from x -> x_with_progress and add a function for logging in tests

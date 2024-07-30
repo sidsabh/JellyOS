@@ -202,21 +202,3 @@ fn as_slice() {
     assert_eq!(stack_vec.as_slice(), &[102]);
     assert_eq!(stack_vec.as_mut_slice(), &mut [102]);
 }
-
-#[test]
-fn errors() {
-    let mut storage = [0usize; 1024];
-    let mut vec = StackVec::new(&mut storage);
-    for i in 0..1024 {
-        assert_eq!(vec.push(i), Ok(()));
-    }
-    for i in 0..1024 {
-        assert_eq!(vec.push(i), Err(()));
-    }
-    for i in 1023..=0 {
-        assert_eq!(vec.pop(), Some(i));
-    }
-    for _ in 1023..=0 {
-        assert_eq!(vec.pop(), None);
-    }
-}

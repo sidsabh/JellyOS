@@ -1,17 +1,6 @@
 [package]
 name = "xmodem"
 version = "0.1.0"
-authors = [
-    "Sergio Benitez <sb@sergio.bz>",
-    "Taesoo Kim <taesoo@gatech.edu>",
-    "Yechan Bae <yechan@gatech.edu>",
-    "Sujin Park <sujin.park@gatech.edu>",
-    "Mansour Alharthi <mansourah@gatech.edu>"
-]
-edition = "2018"
-
-[features]
-no_std = ["shim/no_std"]
+authors = ["Sergio Benitez <sb@sergio.bz>"]
 
 [dependencies]
-shim = { path = "../shim" }
