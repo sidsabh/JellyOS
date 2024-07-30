@@ -10,6 +10,7 @@ mod init;
 use xmodem::Xmodem;
 use core::time::Duration;
 use pi;
+use core::arch::asm;
 
 /// Start address of the binary to load and of the bootloader.
 const BINARY_START_ADDR: usize = 0x80000;
@@ -23,12 +24,20 @@ const MAX_BINARY_SIZE: usize = BOOTLOADER_START_ADDR - BINARY_START_ADDR;
 
 /// Branches to the address `addr` unconditionally.
 unsafe fn jump_to(addr: *mut u8) -> ! {
-    asm!("br $0" : : "r"(addr as usize));
-    loop {
-        asm!("wfe" :::: "volatile")
-    }
+    asm!(
+        "br {dest}",
+        dest = in(reg) addr as usize,
+        options(noreturn)
+    )
+    // asm!("br $0" : : "r"(addr as usize));
+    // loop {
+    //     asm!("wfe" :::: "volatile")
+    // }
 }
 
 fn kmain() -> ! {
     // FIXME: Implement the bootloader.
+    loop {
+        
+    }
 }

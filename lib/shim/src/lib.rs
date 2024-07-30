@@ -6,7 +6,9 @@
 #[cfg(feature = "alloc")]
 extern crate alloc;
 
-cfg_if::cfg_if! {
+use cfg_if::cfg_if;
+
+cfg_if! {
     if #[cfg(feature = "no_std")] {
         mod no_std;
         pub use self::no_std::*;

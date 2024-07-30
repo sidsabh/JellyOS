@@ -2,6 +2,15 @@ use stack_vec::StackVec;
 
 use crate::console::{kprint, kprintln, CONSOLE};
 
+
+use core::prelude::rust_2024::derive;
+
+use core::fmt::Debug;
+use core::result::Result;
+use core::result::Result::{Ok, Err};
+use core::iter::Iterator;
+use core::unimplemented;
+
 /// Error type for `Command` parse failures.
 #[derive(Debug)]
 enum Error {
