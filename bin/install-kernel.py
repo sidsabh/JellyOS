@@ -20,10 +20,11 @@ def load_target_dir():
     if len(sys.argv) == 3:
         dst = sys.argv[2]
 
+    vols = "/Volumes/"
     if dst is None:
-        os.system("lsblk")
+        os.system(f"ls {vols}")
         print("[!] Please provide a installation directory")
-        dst = input("(input) > ").strip()
+        dst = vols + input("(input) > ").strip()
 
     if not os.path.isdir(dst):
         print("[!] Please inesrt your sdcard (mounting point: %s)" % dst)
@@ -131,4 +132,4 @@ if __name__ == '__main__':
         copy_to(*f, sdcard)
 
     print("[!] unmounting %s" % sdcard)
-    os.system("sudo umount '%s'" % sdcard)
+    # os.system("diskutil unmount '%s'" % sdcard)
