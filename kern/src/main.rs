@@ -48,7 +48,6 @@ fn echo_uart() -> ! {
     loop {
         let byte = uart.read_byte();
         uart.write_byte(byte);
-        uart.write_str("<-").expect("failed to extra char");
     }
 }
 
