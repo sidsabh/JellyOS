@@ -19,6 +19,7 @@ pub mod shell;
 
 use console::kprintln;
 use core::arch::asm;
+use core::fmt::Write;
 use core::unimplemented;
 
 // FIXME: You need to add dependencies here to
@@ -36,7 +37,19 @@ use pi::timer::spin_sleep;
 
 #[no_mangle]
 unsafe fn kmain() -> ! {
-    loading_spinner()
+    // loading_spinner()
+    echo_uart()
+}
+
+use pi::uart::MiniUart;
+
+fn echo_uart() -> ! {
+    let mut uart = MiniUart::new();
+    loop {
+        let byte = uart.read_byte();
+        uart.write_byte(byte);
+        uart.write_str("<-").expect("failed to extra char");
+    }
 }
 
 fn loading_spinner() -> ! {
@@ -47,7 +60,7 @@ fn loading_spinner() -> ! {
     let bottom_left = Gpio::new(19).into_output();
     let bottom_right = Gpio::new(26).into_output();
 
-    let delay = Duration::from_millis(250);
+    let delay = Duration::from_millis(100);
 
     let mut pins = [top_left, top_right, right, bottom_right, bottom_left, left];
     let mut i: usize = 0;
