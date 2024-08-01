@@ -124,13 +124,13 @@ def clear_sd_card(directory):
             
 # Use the function in the main logic
 if __name__ == '__main__':
-    if len(sys.argv) == 1 or "-h" in sys.argv or "--help" in sys.argv:
-        print(f"[!] Usage: {sys.argv[0]} [kernel.{bin|elf}] [sdcard directory]?")
-        print(" NOTE: if the sdcard directory is not provided,")
-        print("       we will select the directory previously used")
-        exit(1)
+    # if len(sys.argv) == 1 or "-h" in sys.argv or "--help" in sys.argv:
+    #     print(f"[!] Usage: {sys.argv[0]} [kernel.{bin|elf}] [sdcard directory]?")
+    #     print(" NOTE: if the sdcard directory is not provided,")
+    #     print("       we will select the directory previously used")
+    #     exit(1)
     
-    assert(len(sys.argv) <= 3)
+    # assert(len(sys.argv) <= 3)
 
     kernel = load_kernel()
     sdcard = load_target_dir()

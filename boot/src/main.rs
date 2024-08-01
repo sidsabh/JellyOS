@@ -9,6 +9,8 @@
 
 mod init;
 
+use pi::uart::MiniUart;
+use shim::io::Write;
 use xmodem::Xmodem;
 use core::time::Duration;
 use pi;
@@ -37,9 +39,23 @@ unsafe fn jump_to(addr: *mut u8) -> ! {
     // }
 }
 
+use core::slice::from_raw_parts_mut;
 fn kmain() -> ! {
     // FIXME: Implement the bootloader.
     loop {
-        
+        let into: &mut [u8] = unsafe {from_raw_parts_mut(BINARY_START, MAX_BINARY_SIZE)};
+        let mut from = MiniUart::new();
+        from.set_read_timeout(Duration::from_millis(750));
+        match Xmodem::receive(from, into) {
+            Ok(_) => {
+                break;
+            }, 
+            Err(_) => {
+                // MiniUart::new().write("Failed to load binary\n".as_bytes()).expect("Failed to write fail message");
+            }
+        }
+    }
+    unsafe {
+        jump_to(BINARY_START);
     }
 }

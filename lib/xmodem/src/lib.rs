@@ -1,4 +1,9 @@
-use std::io;
+#![cfg_attr(feature = "no_std", no_std)]
+use core::result::Result::Err;
+use core::mem::size_of_val;
+use core::result::Result::Ok;
+use core::assert;
+use shim::io;
 
 #[cfg(test)] mod tests;
 mod read_ext;

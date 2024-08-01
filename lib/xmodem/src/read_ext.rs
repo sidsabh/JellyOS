@@ -1,4 +1,4 @@
-use std::io;
+use shim::io;
 
 pub trait ReadExt: io::Read {
     fn read_max(&mut self, mut buf: &mut [u8]) -> io::Result<usize> {

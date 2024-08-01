@@ -27,7 +27,6 @@ enum LsrStatus {
 #[repr(C)]
 #[allow(non_snake_case)]
 struct Registers {
-    // FIXME: Declare the "MU" registers from page 8.
     IO: Volatile<u8>,        // Mini Uart I/O Data
     __r0: [Reserved<u8>; 3],
     IER: Volatile<u8>,       // Mini Uart Interrupt Enable
@@ -81,8 +80,7 @@ impl MiniUart {
         // setting GPIO pins as alternative function 5
         Gpio::new(14).into_alt(Function::Alt5);
         Gpio::new(15).into_alt(Function::Alt5);
-        Gpio::new(20).into_output().set();
-        Gpio::new(21).into_output().set();
+        
         registers.CNTL.or_mask(0b11); // enable UART as transmitter, reciever
         MiniUart {
             registers,
@@ -172,7 +170,6 @@ mod uart_io {
     // The `io::Write::write()` method must write all of the requested bytes
     // before returning.
     impl Read for MiniUart {
-        // FIXME: doesn't follow the above description (waits for every byte)
         fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
             let mut ctr: usize = 0;
             for byte in buf.iter_mut() {
@@ -188,6 +185,7 @@ mod uart_io {
                         ))
                     }
                 }
+                self.timeout = None;
             }
             Ok(ctr)
         }
