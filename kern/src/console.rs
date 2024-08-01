@@ -1,4 +1,4 @@
-use core::fmt;
+use core::fmt::{self};
 use pi::uart::MiniUart;
 use shim::io;
 
@@ -6,7 +6,6 @@ use crate::mutex::Mutex;
 use core::option::Option;
 use core::option::Option::None;
 use core::result::Result::Ok;
-use core::unimplemented;
 
 /// A global singleton allowing read/write access to the console.
 pub struct Console {
@@ -22,45 +21,53 @@ impl Console {
     /// Initializes the console if it's not already initialized.
     #[inline]
     fn initialize(&mut self) {
-        unimplemented!()
+        self.inner = Some(MiniUart::new())
     }
 
     /// Returns a mutable borrow to the inner `MiniUart`, initializing it as
     /// needed.
     fn inner(&mut self) -> &mut MiniUart {
-        unimplemented!()
+        match self.inner {
+            Some(ref mut inner) => {
+                return inner;
+            },
+            None => {
+                self.initialize();
+                return self.inner();
+            }
+        }
     }
 
     /// Reads a byte from the UART device, blocking until a byte is available.
     pub fn read_byte(&mut self) -> u8 {
-        unimplemented!()
+        self.inner().read_byte()
     }
 
     /// Writes the byte `byte` to the UART device.
     pub fn write_byte(&mut self, byte: u8) {
-        unimplemented!()
+        self.inner().write_byte(byte)
     }
 }
 
 impl io::Read for Console {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        unimplemented!()
+        self.inner().read(buf)
     }
 }
 
 impl io::Write for Console {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        unimplemented!()
+        self.inner().write(buf)
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        Ok(())
+        self.inner().flush()
     }
 }
 
 impl fmt::Write for Console {
     fn write_str(&mut self, s: &str) -> fmt::Result {
-        unimplemented!()
+        self.inner().write_str(s)
     }
 }
 

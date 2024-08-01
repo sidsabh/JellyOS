@@ -4,7 +4,6 @@ use core::time::Duration;
 use shim::const_assert_size;
 use shim::io;
 
-use shim::io::Read;
 use volatile::prelude::*;
 use volatile::{ReadVolatile, Reserved, Volatile};
 
@@ -82,6 +81,8 @@ impl MiniUart {
         // setting GPIO pins as alternative function 5
         Gpio::new(14).into_alt(Function::Alt5);
         Gpio::new(15).into_alt(Function::Alt5);
+        Gpio::new(20).into_output().set();
+        Gpio::new(21).into_output().set();
         registers.CNTL.or_mask(0b11); // enable UART as transmitter, reciever
         MiniUart {
             registers,

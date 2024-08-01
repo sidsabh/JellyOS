@@ -17,28 +17,14 @@ pub mod console;
 pub mod mutex;
 pub mod shell;
 
-use console::kprintln;
-use core::arch::asm;
-use core::fmt::Write;
-use core::unimplemented;
+use shell::shell;
+use shim::io::Write;
 
 // FIXME: You need to add dependencies here to
 // test your drivers (Phase 2). Add them as needed.
 
-// fn kmain() -> ! {
-//     // FIXME: Start the shell.
-//     kprintln!("hey");
-//     loop {}
-// }sadas
-
-use core::time::Duration;
-use pi::gpio::Gpio;
-use pi::timer::spin_sleep;
-
-#[no_mangle]
-unsafe fn kmain() -> ! {
-    // loading_spinner()
-    echo_uart()
+fn kmain() -> ! {
+    shell("#")
 }
 
 use pi::uart::MiniUart;
@@ -47,10 +33,15 @@ fn echo_uart() -> ! {
     let mut uart = MiniUart::new();
     loop {
         let byte = uart.read_byte();
-        uart.write_byte(byte);
+        uart.write_byte(b'\n');
+        uart.write(&[byte]).expect("error writing char");
+        uart.flush().expect("error flushing");
     }
 }
 
+use core::time::Duration;
+use pi::gpio::Gpio;
+use pi::timer::spin_sleep;
 fn loading_spinner() -> ! {
     let top_left = Gpio::new(5).into_output();
     let top_right = Gpio::new(6).into_output();

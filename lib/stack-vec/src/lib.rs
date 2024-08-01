@@ -1,4 +1,3 @@
-#![feature(hint_assert_unchecked)]
 #![no_std]
 
 #[cfg(test)]

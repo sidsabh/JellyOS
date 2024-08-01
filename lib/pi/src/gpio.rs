@@ -1,4 +1,3 @@
-use core::convert::TryInto;
 use core::marker::PhantomData;
 
 use crate::common::{states, IO_BASE};

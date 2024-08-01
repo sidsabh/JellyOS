@@ -1,15 +1,14 @@
+use shim::io::Write;
 use stack_vec::StackVec;
 
 use crate::console::{kprint, kprintln, CONSOLE};
 
-
 use core::prelude::rust_2024::derive;
 
 use core::fmt::Debug;
-use core::result::Result;
-use core::result::Result::{Ok, Err};
 use core::iter::Iterator;
-use core::unimplemented;
+use core::result::Result;
+use core::result::Result::{Err, Ok};
 
 /// Error type for `Command` parse failures.
 #[derive(Debug)]
@@ -22,6 +21,31 @@ enum Error {
 struct Command<'a> {
     args: StackVec<'a, &'a str>,
 }
+
+const WELCOME_TXT: &str = r#"
+                                  _
+                               _ooOoo_
+                              o8888888o
+                              88" . "88
+                              (| -_- |)
+                              O\  =  /O
+                           ____/`---'\____
+                         .'  \\|     |//  `.
+                        /  \\|||  :  |||//  \
+                       /  _||||| -:- |||||_  \
+                       |   | \\\  -  /'| |   |
+                       | \_|  `\`---'//  |_/ |
+                       \  .-\__ `-. -'__/-.  /
+                     ___`. .'  /--.--\  `. .'___
+                  ."" '<  `.___\_<|>_/___.' _> \"".
+                 | | :  `- \`. ;`. _/; .'/ /  .' ; |
+                 \  \ `-.   \_\_`. _.'_/_/  -' _.' /
+==================`-.`___`-.__\ \___  /__.-'_.'_.-'================
+ ____  _     _     _ _                _   _            ___  ____  _ 
+/ ___|(_) __| | __| | |__   __ _ _ __| |_| |__   __ _ / _ \/ ___|| |
+\___ \| |/ _` |/ _` | '_ \ / _` | '__| __| '_ \ / _` | | | \___ \| |
+ ___) | | (_| | (_| | | | | (_| | |  | |_| | | | (_| | |_| |___) |_|
+|____/|_|\__,_|\__,_|_| |_|\__,_|_|   \__|_| |_|\__,_|\___/|____/(_)"#;
 
 impl<'a> Command<'a> {
     /// Parse a command from a string `s` using `buf` as storage for the
@@ -46,12 +70,77 @@ impl<'a> Command<'a> {
 
     /// Returns this command's path. This is equivalent to the first argument.
     fn path(&self) -> &str {
-        unimplemented!()
+        self.args[0]
     }
 }
 
 /// Starts a shell using `prefix` as the prefix for each line. This function
 /// returns if the `exit` command is called.
+use core::str::from_utf8;
+const MAX_LINE_LENGTH: usize = 512;
 pub fn shell(prefix: &str) -> ! {
-    unimplemented!()
+    kprintln!("{}", WELCOME_TXT);
+
+    let mut console = CONSOLE.lock();
+    loop {
+        kprint!("{} ", prefix);
+        let mut storage = [0; MAX_LINE_LENGTH]; // maxiumum command size
+        let mut line: StackVec<u8> = StackVec::new(&mut storage);
+        let mut idx = 0;
+
+        // get bytes
+        loop {
+            if idx >= MAX_LINE_LENGTH {
+                break;
+            }
+            match console.read_byte() {
+                b'\r' | b'\n' => break,
+                8 | 127 => {
+                    if idx != 0 {
+                        console.write_byte(8u8);
+                        console.write_byte(b' ');
+                        console.write_byte(8u8);
+                        idx -= 1;
+                        line.pop();
+                    }
+                }
+                byte if (byte as char).is_ascii() => match line.push(byte) {
+                    Ok(()) => {
+                        kprint!("{}", byte as char);
+                        idx += 1;
+                    }
+                    Err(()) => {
+                        console
+                            .write("failed".as_bytes())
+                            .expect("failed to write to console");
+                    }
+                },
+                _ => {
+                    console.write_byte(7u8);
+                    idx += 1;
+                }
+            }
+        }
+        kprintln!("");
+        match from_utf8(line.into_slice()){ 
+            Ok(command_string) if command_string.len() != 0 => {
+                let mut buf = [""; 64];
+                match Command::parse(command_string, &mut buf) {
+                    Ok(command) if command.path() == "echo" => {
+                        command.args.iter().skip(1).for_each(|s| kprint!("{} ", *s));
+                        kprintln!("");
+                    },
+                    Ok(command) => {
+                        kprintln!("unknown command: {}", command.path());
+                    },
+                    _ => {
+                        kprintln!("error parsing command");
+                    }
+                }
+            }, 
+            _ => {
+                kprintln!("");
+            }
+        }
+    }
 }
