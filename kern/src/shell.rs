@@ -126,6 +126,9 @@ pub fn shell(prefix: &str) -> ! {
                         command.args.iter().skip(1).for_each(|s| kprint!("{} ", *s));
                         kprintln!("");
                     },
+                    Ok(command) if command.path() == "welcome"=> {
+                        kprintln!("{}", WELCOME_TXT);
+                    },
                     Ok(command) => {
                         kprintln!("unknown command: {}", command.path());
                     },

@@ -4,7 +4,7 @@ KERN := kernel
 TARGET := target/aarch64-unknown-none/release/${KERN}
 OBJCPY := cargo objcopy --bin $(KERN) --release -- -O binary --strip-all
 # TTY_PATH := /dev/tty.SLAB_USBtoUART
-TTY_PATH := /dev/ttys019
+TTY_PATH := /dev/ttys020
 
 .PHONY: all build qemu transmit objdump nm check clean install test
 
