@@ -90,9 +90,6 @@ pub fn shell(prefix: &str) -> ! {
 
         // get bytes
         loop {
-            if idx >= MAX_LINE_LENGTH {
-                break;
-            }
             match console.read_byte() {
                 b'\r' | b'\n' => break,
                 8 | 127 => {
@@ -104,7 +101,7 @@ pub fn shell(prefix: &str) -> ! {
                         line.pop();
                     }
                 }
-                byte if (byte as char).is_ascii() => match line.push(byte) {
+                byte if (byte as char).is_ascii() && idx < MAX_LINE_LENGTH => match line.push(byte) {
                     Ok(()) => {
                         kprint!("{}", byte as char);
                         idx += 1;
@@ -116,8 +113,7 @@ pub fn shell(prefix: &str) -> ! {
                     }
                 },
                 _ => {
-                    console.write_byte(7u8);
-                    idx += 1;
+                    console.write_byte(7u8); // rings the bell
                 }
             }
         }
@@ -133,14 +129,15 @@ pub fn shell(prefix: &str) -> ! {
                     Ok(command) => {
                         kprintln!("unknown command: {}", command.path());
                     },
+                    Err(Error::TooManyArgs)  => {
+                        kprintln!("error: too many arguments");
+                    },
                     _ => {
-                        kprintln!("error parsing command");
+                        kprintln!("error: failed to parse");
                     }
                 }
             }, 
-            _ => {
-                kprintln!("");
-            }
+            _ => {}
         }
     }
 }
