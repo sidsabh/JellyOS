@@ -5,6 +5,8 @@ TARGET := target/aarch64-unknown-none/release/${KERN}
 OBJCPY := cargo objcopy --bin $(KERN) --release -- -O binary --strip-all
 # TTY_PATH := /dev/tty.SLAB_USBtoUART
 TTY_PATH := /dev/ttys020
+SDCARD ?= $(ROOT)/ext/fat32-imgs/mock1.fat32.img
+QEMU_ARGS ?=
 
 .PHONY: all build qemu transmit objdump nm check clean install test
 
@@ -24,10 +26,18 @@ check:
 
 qemu: build
 	./qemu.sh build/$(KERN).bin
+	./qemu.sh build/$(KERN).bin -drive file=$(SDCARD),format=raw,if=sd $(QEMU_ARGS)
+
+qemu-gdb: build
+	./qemu.sh build/$(KERN).bin -drive file=$(SDCARD),format=raw,if=sd -s -S
+
+qemu-asm: build
+	./qemu.sh build/$(KERN).bin -drive file=$(SDCARD),format=raw,if=sd -d in_asm
 
 transmit: build
 	@echo "+ Transmitting build/$(KERN).bin to $(TTY_PATH)"
 	ttywrite -i build/$(KERN).bin $(TTY_PATH)
+	screen $(TTY_PATH) 115200
 
 objdump: build
 	cargo objdump -- -disassemble -no-show-raw-insn -print-imm-hex build/$(KERN).elf

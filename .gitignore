@@ -2,3 +2,6 @@ target/
 build/
 TAGS
 .dep
+
+lib/**/Cargo.lock
+ext/fat32-imgs/*.fat32.img

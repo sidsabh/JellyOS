@@ -3,6 +3,7 @@
 #[cfg(test)]
 mod tests;
 
+
 /// A contiguous array type backed by a slice.
 ///
 /// `StackVec`'s functionality is similar to that of `std::Vec`. You can `push`
@@ -14,7 +15,7 @@ mod tests;
 #[derive(Debug)]
 pub struct StackVec<'a, T: 'a> {
     storage: &'a mut [T],
-    len: usize
+    len: usize,
 }
 
 impl<'a, T: 'a> StackVec<'a, T> {
@@ -121,6 +122,8 @@ impl<'a, T> StackVec<'a, T> where T : Clone + 'a {
 }
 
 use core::ops::{Deref, DerefMut};
+use core::iter::IntoIterator;
+
     
 impl<'a, T: 'a> Deref for StackVec<'a, T> {
     type Target = [T];
