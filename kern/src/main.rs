@@ -27,18 +27,24 @@ use shim::io::Write;
 
 use allocator::Allocator;
 use fs::FileSystem;
+use pi::atags::Atags;
 
 #[cfg_attr(not(test), global_allocator)]
 pub static ALLOCATOR: Allocator = Allocator::uninitialized();
 pub static FILESYSTEM: FileSystem = FileSystem::uninitialized();
 use crate::console::kprintln;
 fn kmain() -> ! {
-    // unsafe {
-    //     ALLOCATOR.initialize();
+    spin_sleep(Duration::from_millis(500)); // necessary delay after transmit befoer screen
+    unsafe {
+        // ALLOCATOR.initialize();
     //     FILESYSTEM.initialize();
-    // }
+    }
+    let atags = Atags::get();
+    for a in atags {
+        kprintln!("{:#?}", a);
+    }
 
-    shell(">")
+    shell(">");
 }
 
 use pi::uart::MiniUart;

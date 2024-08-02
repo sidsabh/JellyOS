@@ -1,7 +1,7 @@
 /// A raw `ATAG` as laid out in memory.
 #[repr(C)]
 pub struct Atag {
-    pub dwords: u32,
+    pub dwords: u32, // size in double words (32-bit words) aka number of bytes * 4
     pub tag: u32,
     pub kind: Kind,
 }
@@ -18,9 +18,19 @@ impl Atag {
     pub const VIDEOLFB: u32 = 0x54410008;
     pub const CMDLINE: u32 = 0x54410009;
 
-    /// FIXME: Returns the ATAG following `self`, if there is one.
+    /// Returns the ATAG following `self`, if there is one.
     pub fn next(&self) -> Option<&Atag> {
-        unimplemented!()
+        if self.tag == Atag::NONE {
+            None
+        } else {
+            let this_addr = self as *const Atag as *const u32;
+            let next_atag : &Atag;
+            unsafe  {
+                let next_start = this_addr.add(self.dwords as usize);
+                next_atag = &*(next_start as *const Atag);
+            }
+            Some(next_atag)
+        }
     }
 }
 
