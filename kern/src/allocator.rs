@@ -84,7 +84,7 @@ pub fn memory_map() -> Option<(usize, usize)> {
     match atags.find(|tag| tag.mem().is_some()) {
         Some(atag) => {
             let mem = atag.mem().unwrap();
-            kprintln!("{} {}", binary_end, (mem.size as usize)-binary_end);
+            // kprintln!("{} {}", binary_end, (mem.size as usize)-binary_end);
             Some((binary_end, (mem.size as usize)-binary_end))
         },
         None => None

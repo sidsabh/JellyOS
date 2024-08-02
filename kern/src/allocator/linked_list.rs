@@ -90,6 +90,9 @@ impl LinkedList {
         self.head = item;
     }
 
+    // new -> old_head -> ...
+    // [ptr_to_next, data] aka node
+
     /// Removes and returns the first item in the list, if any.
     pub fn pop(&mut self) -> Option<*mut usize> {
         let value = self.peek()?;

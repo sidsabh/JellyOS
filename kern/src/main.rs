@@ -38,10 +38,10 @@ use pi::atags::Atags;
 fn kmain() -> ! {
     spin_sleep(Duration::from_millis(500)); // necessary delay after transmit before tty
 
-    let atags = Atags::get();
-    for a in atags {
-        kprintln!("{:#?}", a);
-    }
+    // let atags = Atags::get();
+    // for a in atags {
+    //     kprintln!("{:#?}", a);
+    // }
 
     unsafe {
         ALLOCATOR.initialize();
@@ -50,11 +50,11 @@ fn kmain() -> ! {
 
     use alloc::vec::Vec;
 
-    let mut v = Vec::new();
-    for i in 0..50 {
-        v.push(i);
-        kprintln!("{:?}", v);
-    }
+    // let mut v = Vec::new();
+    // for i in 0..50 {
+    //     v.push(i);
+    //     kprintln!("{:?}", v);
+    // }
 
     shell(">");
 }

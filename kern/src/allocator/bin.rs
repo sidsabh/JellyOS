@@ -5,6 +5,7 @@ use core::ptr;
 use crate::allocator::linked_list::LinkedList;
 use crate::allocator::util::*;
 use crate::allocator::LocalAlloc;
+use crate::console::kprint;
 
 /// A simple allocator that allocates based on size classes.
 ///   bin 0 (2^3 bytes)    : handles allocations in (0, 2^3]
@@ -17,16 +18,27 @@ use crate::allocator::LocalAlloc;
 
 pub struct Allocator {
     // FIXME: Add the necessary fields.
+    current: usize,
+    end: usize,
+    bins: [LinkedList; 30],
 }
 
 impl Allocator {
     /// Creates a new bin allocator that will allocate memory from the region
     /// starting at address `start` and ending at address `end`.
     pub fn new(start: usize, end: usize) -> Allocator {
-        unimplemented!("bin allocator")
+        Allocator {
+            current: start,
+            end,
+            bins: [LinkedList::new(); 30],
+        }
     }
 }
+use core::cmp::max;
+use crate::kprintln;
 
+
+// used the 30 bins of increasing 2 powers 
 impl LocalAlloc for Allocator {
     /// Allocates memory. Returns a pointer meeting the size and alignment
     /// properties of `layout.size()` and `layout.align()`.
@@ -50,9 +62,27 @@ impl LocalAlloc for Allocator {
     /// or `layout` does not meet this allocator's
     /// size or alignment constraints.
     unsafe fn alloc(&mut self, layout: Layout) -> *mut u8 {
-        unimplemented!("bin allocator")
+        let size = align_up(layout.size(), layout.align());
+        let idx: usize = max(0 as i32, ((size.ilog2() + 1) as i32) - 3) as usize;
+        match self.bins[idx].iter_mut().find(|x| (x.value() as usize) % layout.align() == 0) {
+            Some(node) => {
+                let value = node.value();
+                kprintln!("grab alloc {:?}", value);
+                value as *mut u8
+            },
+            None => {
+                let potential_addr = align_up(self.current, layout.align());
+                match potential_addr.checked_add(layout.size()) {
+                    Some(new_current) if new_current <= self.end => {
+                        self.current = new_current;
+                        kprintln!("make alloc {:?}", potential_addr as *mut usize);
+                        potential_addr as *mut u8
+                    }
+                    _ => core::ptr::null_mut(),
+                }
+            }
+        }
     }
-
     /// Deallocates the memory referenced by `ptr`.
     ///
     /// # Safety
@@ -67,7 +97,10 @@ impl LocalAlloc for Allocator {
     /// Parameters not meeting these conditions may result in undefined
     /// behavior.
     unsafe fn dealloc(&mut self, ptr: *mut u8, layout: Layout) {
-        unimplemented!("bin allocator")
+        let size = align_up(layout.size(), layout.align());
+        let idx: usize = max(0 as i32, ((size.ilog2() + 1) as i32) - 3) as usize;
+        kprintln!("dealloc {:?}", ptr);
+        self.bins[idx].push(ptr as *mut usize);
     }
 }
 
