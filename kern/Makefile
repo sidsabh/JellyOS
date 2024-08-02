@@ -3,7 +3,7 @@ ROOT := $(shell git rev-parse --show-toplevel)
 KERN := kernel
 TARGET := target/aarch64-unknown-none/release/${KERN}
 OBJCPY := cargo objcopy --bin $(KERN) --release -- -O binary --strip-all
-TTY_PATH := /dev/ttys023 # := /dev/tty.SLAB_USBtoUART
+TTY_PATH := /dev/ttys008 # := /dev/tty.SLAB_USBtoUART
 SDCARD ?= $(ROOT)/ext/fat32-imgs/mock1.fat32.img
 QEMU_ARGS ?=
 
@@ -25,7 +25,7 @@ check:
 
 qemu: build
 	./qemu.sh build/$(KERN).bin
-	./qemu.sh build/$(KERN).bin -drive file=$(SDCARD),format=raw,if=sd $(QEMU_ARGS)
+	@# ./qemu.sh build/$(KERN).bin -drive file=$(SDCARD),format=raw,if=sd $(QEMU_ARGS)
 
 qemu-gdb: build
 	./qemu.sh build/$(KERN).bin -drive file=$(SDCARD),format=raw,if=sd -s -S

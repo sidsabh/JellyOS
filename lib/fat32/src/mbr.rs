@@ -1,37 +1,63 @@
 use core::fmt;
+use core::ptr::from_raw_parts;
 use shim::const_assert_size;
 use shim::io;
 
 use crate::traits::BlockDevice;
 
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub struct CHS {
-    // FIXME: Fill me in.
+    head: u8,
+    sector_and_cylinder: [u8; 2],
 }
 
 // FIXME: implement Debug for CHS
 
-// const_assert_size!(CHS, 3);
+const_assert_size!(CHS, 3);
 
 #[repr(C, packed)]
+#[derive(Debug)]
 pub struct PartitionEntry {
-    // FIXME: Fill me in.
+    boot_indicator: u8,
+    start_chs: CHS,
+    partition_type: u8,
+    end_chs: CHS,
+    relative_sector: u32,
+    total_sectors: u32,
 }
 
 // FIXME: implement Debug for PartitionEntry
 
-// const_assert_size!(PartitionEntry, 16);
+const_assert_size!(PartitionEntry, 16);
 
 /// The master boot record (MBR).
 #[repr(C, packed)]
 pub struct MasterBootRecord {
-    // FIXME: Fill me in.
+    mbr_boostrap: [u8; 436],
+    disk_id: [u8; 10],
+    partition_table: [PartitionEntry; 4],
+    signature: [u8; 2],
 }
 
-// FIXME: implemente Debug for MaterBootRecord
+use core::mem;
+impl Default for MasterBootRecord {
+    fn default() -> MasterBootRecord {
+        unsafe { mem::zeroed() }
+    }
+}
 
-// const_assert_size!(MasterBootRecord, 512);
+impl fmt::Debug for MasterBootRecord {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "MBR:\n\tdisk_id: {:?}\n\tpartition_table: {:?}\n\tsignature: {:?}",
+            self.disk_id, self.partition_table, self.signature
+        )
+    }
+}
+
+const_assert_size!(MasterBootRecord, 512);
 
 #[derive(Debug)]
 pub enum Error {
@@ -43,6 +69,10 @@ pub enum Error {
     BadSignature,
 }
 
+const VALID_SIGNATURE: [u8; 2] = [0x55, 0xAA];
+const VALID_INDICATORS: [u8; 2] = [0x80, 0x00];
+
+use core::slice;
 impl MasterBootRecord {
     /// Reads and returns the master boot record (MBR) from `device`.
     ///
@@ -53,6 +83,24 @@ impl MasterBootRecord {
     /// boot indicator. Returns `Io(err)` if the I/O error `err` occured while
     /// reading the MBR.
     pub fn from<T: BlockDevice>(mut device: T) -> Result<MasterBootRecord, Error> {
-        unimplemented!("MasterBootRecord::from()")
+        let mut mbr = MasterBootRecord::default();
+        let mbr_slice: &mut [u8] = unsafe {
+            slice::from_raw_parts_mut(
+                &mut mbr as *mut MasterBootRecord as *mut u8,
+                size_of::<MasterBootRecord>(),
+            )
+        };
+        device.read_sector(0, mbr_slice);
+        // error checking
+        if mbr.signature != VALID_SIGNATURE {
+            return Err(Error::BadSignature);
+        }
+        for (i, partition) in mbr.partition_table.iter().enumerate() {
+            if !VALID_INDICATORS.contains(&partition.boot_indicator) {
+                return Err(Error::UnknownBootIndicator(i as u8));
+            }
+        }
+
+        Ok(mbr)
     }
 }

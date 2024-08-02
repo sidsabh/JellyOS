@@ -31,7 +31,7 @@ use fs::FileSystem;
 #[cfg_attr(not(test), global_allocator)]
 pub static ALLOCATOR: Allocator = Allocator::uninitialized();
 
-pub static FILESYSTEM: FileSystem = FileSystem::uninitialized();
+// pub static FILESYSTEM: FileSystem = FileSystem::uninitialized();
 use crate::console::kprintln;
 
 use pi::atags::Atags;
