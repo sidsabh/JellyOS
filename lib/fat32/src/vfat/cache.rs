@@ -19,7 +19,7 @@ pub struct Partition {
     pub num_sectors: u64,
     /// The size, in bytes, of a logical sector in the partition.
     pub sector_size: u64,
-}
+} 
 
 pub struct CachedPartition {
     device: Box<dyn BlockDevice>,

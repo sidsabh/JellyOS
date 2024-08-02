@@ -57,40 +57,42 @@ pub trait BlockDevice: Send {
     fn write_sector(&mut self, n: u64, buf: &[u8]) -> io::Result<usize>;
 }
 
-// impl<'a, T: BlockDevice> BlockDevice for &'a mut T {
-//     fn read_sector(&mut self, n: u64, buf: &mut [u8]) -> io::Result<usize> {
-//         (*self).read_sector(n, buf)
-//     }
+impl<'a, T: BlockDevice> BlockDevice for &'a mut T {
+    fn read_sector(&mut self, n: u64, buf: &mut [u8]) -> io::Result<usize> {
+        (*self).read_sector(n, buf)
+    }
 
-//     fn write_sector(&mut self, n: u64, buf: &[u8]) -> io::Result<usize> {
-//         (*self).write_sector(n, buf)
-//     }
-// }
+    fn write_sector(&mut self, n: u64, buf: &[u8]) -> io::Result<usize> {
+        (*self).write_sector(n, buf)
+    }
+}
+use shim::io::{Seek, Read, Write};
+macro impl_for_read_write_seek($(<$($gen:tt),*>)* $T:path) {
 
-// macro impl_for_read_write_seek($(<$($gen:tt),*>)* $T:path) {
-//     use shim::io::{Read, Write, Seek};
+    impl $(<$($gen),*>)* BlockDevice for $T {
+        fn read_sector(&mut self, n: u64, buf: &mut [u8]) -> io::Result<usize> {
+            let sector_size = self.sector_size();
+            let to_read = ::core::cmp::min(sector_size as usize, buf.len());
+            self.seek(io::SeekFrom::Start(n * sector_size))?;
+            self.read_exact(&mut buf[..to_read])?;
+            Ok(to_read)
+        }
 
-//     impl $(<$($gen),*>)* BlockDevice for $T {
-//         fn read_sector(&mut self, n: u64, buf: &mut [u8]) -> io::Result<usize> {
-//             let sector_size = self.sector_size();
-//             let to_read = ::core::cmp::min(sector_size as usize, buf.len());
-//             self.seek(io::SeekFrom::Start(n * sector_size))?;
-//             self.read_exact(&mut buf[..to_read])?;
-//             Ok(to_read)
-//         }
+        fn write_sector(&mut self, n: u64, buf: &[u8]) -> io::Result<usize> {
+            let sector_size = self.sector_size();
+            let to_write = ::core::cmp::min(sector_size as usize, buf.len());
+            self.seek(io::SeekFrom::Start(n * sector_size))?;
+            self.write_all(&buf[..to_write])?;
+            Ok(to_write)
+        }
+    }
+}
 
-//         fn write_sector(&mut self, n: u64, buf: &[u8]) -> io::Result<usize> {
-//             let sector_size = self.sector_size();
-//             let to_write = ::core::cmp::min(sector_size as usize, buf.len());
-//             self.seek(io::SeekFrom::Start(n * sector_size))?;
-//             self.write_all(&buf[..to_write])?;
-//             Ok(to_write)
-//         }
-//     }
-// }
 
-// impl_for_read_write_seek!(<'a> shim::io::Cursor<&'a mut [u8]>);
-// impl_for_read_write_seek!(shim::io::Cursor<Vec<u8>>);
-// impl_for_read_write_seek!(shim::io::Cursor<Box<[u8]>>);
-// #[cfg(test)]
-// impl_for_read_write_seek!(::std::fs::File);
+
+
+impl_for_read_write_seek!(<'a> shim::io::Cursor<&'a mut [u8]>);
+impl_for_read_write_seek!(shim::io::Cursor<Vec<u8>>);
+impl_for_read_write_seek!(shim::io::Cursor<Box<[u8]>>);
+#[cfg(test)]
+impl_for_read_write_seek!(::std::fs::File);
