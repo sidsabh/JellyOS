@@ -70,22 +70,32 @@ extern "C" {
     static __text_end: u8;
 }
 
+use crate::allocator::util::align_up;
 /// Returns the (start address, end address) of the available memory on this
 /// system if it can be determined. If it cannot, `None` is returned.
 ///
 /// This function is expected to return `Some` under all normal cirumstances.
 pub fn memory_map() -> Option<(usize, usize)> {
     let page_size = 1 << 12;
-    let binary_end = unsafe { (&__text_end as *const u8) as usize };
+    let mut binary_end = unsafe { (&__text_end as *const u8) as usize };
+    binary_end = align_up(binary_end, page_size);
 
-    unimplemented!("memory map")
+    let mut atags = Atags::get();
+    match atags.find(|tag| tag.mem().is_some()) {
+        Some(atag) => {
+            let mem = atag.mem().unwrap();
+            kprintln!("{} {}", binary_end, (mem.size as usize)-binary_end);
+            Some((binary_end, (mem.size as usize)-binary_end))
+        },
+        None => None
+    }
 }
 
 impl fmt::Debug for Allocator {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.0.lock().as_mut() {
             // Some(ref alloc) => write!(f, "{:?}", alloc)?,
-            Some(ref alloc) => {},
+            Some(ref alloc) => {}
             None => write!(f, "Not yet initialized")?,
         }
         Ok(())

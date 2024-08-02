@@ -6,7 +6,12 @@
 ///
 /// Panics if `align` is not a power of 2.
 pub fn align_down(addr: usize, align: usize) -> usize {
-    unimplemented!()
+    if !align.is_power_of_two() {
+        panic!("align is not a power of two");
+    }
+    
+    let align_minus_one = align.checked_sub(1).expect("align overflow");
+    addr & !align_minus_one
 }
 
 /// Align `addr` upwards to the nearest multiple of `align`.
@@ -18,5 +23,12 @@ pub fn align_down(addr: usize, align: usize) -> usize {
 /// Panics if `align` is not a power of 2
 /// or aligning up overflows the address.
 pub fn align_up(addr: usize, align: usize) -> usize {
-    unimplemented!()
+    if !align.is_power_of_two() {
+        panic!("align is not a power of two");
+    }
+    
+    let align_minus_one = align.checked_sub(1).expect("align overflow");
+    addr.checked_add(align_minus_one)
+        .expect("align overflow")
+        & !align_minus_one
 }

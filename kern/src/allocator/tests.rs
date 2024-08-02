@@ -72,18 +72,19 @@ mod align_util {
 
 mod allocator {
     extern crate alloc;
-    use alloc::raw_vec::RawVec;
+
+    use alloc::vec::Vec;
 
     use core::alloc::Layout;
 
     use crate::allocator::{bin, bump, LocalAlloc};
 
     macro_rules! test_allocators {
-        (@$kind:ident, $name:ident, $mem:expr, |$info:pat| $block:expr) => {
+        (@$kind:ident, $name:ident, $mem:expr, |$info:pat_param| $block:expr) => {
             #[test]
             fn $name() {
-                let mem: RawVec<u8> = RawVec::with_capacity($mem);
-                let start = mem.ptr() as usize;
+                let mem: Vec<u8> = Vec::with_capacity($mem);
+                let start = mem.as_ptr() as usize;
                 let end = start + $mem;
 
                 let allocator = $kind::Allocator::new(start, end);
@@ -96,7 +97,7 @@ mod allocator {
             }
         };
 
-        ($bin:ident, $bump:ident, $mem:expr, |$info:pat| $block:expr) => (
+        ($bin:ident, $bump:ident, $mem:expr, |$info:pat_param| $block:expr) => (
             test_allocators!(@bin, $bin, $mem, |$info| $block);
             test_allocators!(@bump, $bump, $mem, |$info| $block);
         );

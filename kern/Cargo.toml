@@ -20,4 +20,4 @@ stack-vec = { path = "../lib/stack-vec/" }
 fat32 = { path = "../lib/fat32/", features = ["no_std"] }
 
 [dev-dependencies]
-shim = { path = "../lib/shim", features = ["alloc"] }
+shim = { path = "../lib/shim", features = ["alloc"]}

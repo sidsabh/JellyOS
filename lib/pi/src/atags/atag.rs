@@ -50,12 +50,11 @@ impl From<&'static raw::Atag> for Atag {
                 (raw::Atag::CORE, &raw::Kind { core }) => Atag::Core(core),
                 (raw::Atag::MEM, &raw::Kind { mem }) => Atag::Mem(mem),
                 (raw::Atag::CMDLINE, &raw::Kind { ref cmd }) => {
-                    Atag::Cmd("why")
-                    // let start = &cmd.cmd as *const u8;
-                    // let mut length : usize = 0;
-                    // while *(start.add(length)) != b'\0' {length += 1;}
-                    // let xs = from_raw_parts(start, length);
-                    // Atag::Cmd(str::from_utf8_unchecked(xs))
+                    let start = &cmd.cmd as *const u8;
+                    let mut length : usize = 0;
+                    while *(start.add(length)) != b'\0' {length += 1;}
+                    let xs = from_raw_parts(start, length);
+                    Atag::Cmd(str::from_utf8_unchecked(xs))
                 },
                 (raw::Atag::NONE, _) => Atag::None,
                 (id, _) => Atag::Unknown(id),

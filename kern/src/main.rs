@@ -1,17 +1,18 @@
-#![no_std]
-#![feature(prelude_2024)]
-#![feature(alloc_error_handler)]
-// #![feature(const_fn)]
-#![feature(decl_macro)]
-#![feature(asm)]
-#![feature(global_asm)]
-#![feature(auto_traits)]
-#![feature(raw_vec_internals)]
 #![cfg_attr(not(test), no_std)]
 #![cfg_attr(not(test), no_main)]
+// features
+#![feature(prelude_2024)]
+#![feature(alloc_error_handler)]
+#![feature(decl_macro)]
+#![feature(auto_traits)]
 #![feature(negative_impls)]
+#![feature(panic_info_message)]
+#![feature(exclusive_range_pattern)]
+#![feature(const_mut_refs)]
+#![feature(const_option)]
 
 #[cfg(not(test))]
+
 mod init;
 
 extern crate alloc;
@@ -27,22 +28,27 @@ use shim::io::Write;
 
 use allocator::Allocator;
 use fs::FileSystem;
-use pi::atags::Atags;
 
 #[cfg_attr(not(test), global_allocator)]
 pub static ALLOCATOR: Allocator = Allocator::uninitialized();
+
 pub static FILESYSTEM: FileSystem = FileSystem::uninitialized();
 use crate::console::kprintln;
+
+use pi::atags::Atags;
 fn kmain() -> ! {
     spin_sleep(Duration::from_millis(500)); // necessary delay after transmit befoer screen
-    unsafe {
-        // ALLOCATOR.initialize();
-    //     FILESYSTEM.initialize();
-    }
+
     let atags = Atags::get();
     for a in atags {
         kprintln!("{:#?}", a);
     }
+    
+    unsafe {
+        ALLOCATOR.initialize();
+        // FILESYSTEM.initialize();
+    }
+    
 
     shell(">");
 }
