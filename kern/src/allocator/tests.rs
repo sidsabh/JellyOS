@@ -83,7 +83,7 @@ mod allocator {
         (@$kind:ident, $name:ident, $mem:expr, |$info:pat_param| $block:expr) => {
             #[test]
             fn $name() {
-                let mem: Vec<u8> = Vec::with_capacity($mem);
+                let mem: Vec<u8> = Vec::with_capacity($mem); // this should be fine sicne it won't grow?
                 let start = mem.as_ptr() as usize;
                 let end = start + $mem;
 

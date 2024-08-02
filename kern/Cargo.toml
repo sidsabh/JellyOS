@@ -10,8 +10,6 @@ authors = [
 ]
 edition = "2021"
 
-[package.metadata.cargo-xbuild]
-memcpy = true
 
 [dependencies]
 pi = { path = "../lib/pi" }

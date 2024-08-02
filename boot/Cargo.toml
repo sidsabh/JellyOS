@@ -8,10 +8,7 @@ authors = [
     "Sujin Park <sujin.park@gatech.edu>",
     "Mansour Alharthi <mansourah@gatech.edu>"
 ]
-edition = "2018"
-
-[package.metadata.cargo-xbuild]
-memcpy = true
+edition = "2021"
 
 [dependencies]
 pi = { path = "../lib/pi/" }

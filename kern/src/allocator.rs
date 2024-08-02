@@ -4,7 +4,7 @@ mod util;
 mod bin;
 mod bump;
 
-type AllocatorImpl = bin::Allocator;
+type AllocatorImpl = bump::Allocator;
 
 #[cfg(test)]
 mod tests;
@@ -14,7 +14,7 @@ use core::fmt;
 
 use crate::console::kprintln;
 use crate::mutex::Mutex;
-use pi::atags::{Atag, Atags};
+use pi::atags::Atags;
 
 /// `LocalAlloc` is an analogous trait to the standard library's `GlobalAlloc`,
 /// but it takes `&mut self` in `alloc()` and `dealloc()`.

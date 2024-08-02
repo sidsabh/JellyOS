@@ -21,7 +21,7 @@ check:
 	@cargo check
 
 qemu: build
-	./qemu.sh build/$(KERN).elf
+	./qemu.sh build/$(KERN).bin
 
 objdump: build
 	cargo objdump -- -disassemble -no-show-raw-insn -print-imm-hex build/$(KERN).elf
