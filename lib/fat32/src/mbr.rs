@@ -1,5 +1,4 @@
 use core::fmt;
-use core::ptr::from_raw_parts;
 use shim::const_assert_size;
 use shim::io;
 
@@ -12,12 +11,21 @@ pub struct CHS {
     sector_and_cylinder: [u8; 2],
 }
 
+impl Default for CHS {
+    fn default() -> CHS {
+        CHS {
+            head: 0,
+            sector_and_cylinder: [0; 2],
+        }
+    }
+}
+
 // FIXME: implement Debug for CHS
 
 const_assert_size!(CHS, 3);
 
 #[repr(C, packed)]
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct PartitionEntry {
     boot_indicator: u8,
     start_chs: CHS,
@@ -28,6 +36,18 @@ pub struct PartitionEntry {
 }
 
 // FIXME: implement Debug for PartitionEntry
+impl Default for PartitionEntry {
+    fn default() -> PartitionEntry {
+        PartitionEntry {
+            boot_indicator: 0,
+            start_chs: CHS::default(),
+            partition_type: 0,
+            end_chs: CHS::default(),
+            relative_sector: 0,
+            total_sectors: 0,
+        }
+    }
+}
 
 const_assert_size!(PartitionEntry, 16);
 
@@ -40,10 +60,14 @@ pub struct MasterBootRecord {
     signature: [u8; 2],
 }
 
-use core::mem;
 impl Default for MasterBootRecord {
     fn default() -> MasterBootRecord {
-        unsafe { mem::zeroed() }
+        MasterBootRecord {
+            mbr_boostrap : [0; 436],
+            disk_id: [0; 10],
+            partition_table: [PartitionEntry::default(); 4],
+            signature: [0; 2],
+        }
     }
 }
 
@@ -90,8 +114,7 @@ impl MasterBootRecord {
                 size_of::<MasterBootRecord>(),
             )
         };
-        device.read_sector(0, mbr_slice);
-        // error checking
+        device.read_sector(0, mbr_slice).map_err(|err| Error::Io(err))?;
         if mbr.signature != VALID_SIGNATURE {
             return Err(Error::BadSignature);
         }
