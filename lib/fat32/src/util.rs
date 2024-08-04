@@ -111,3 +111,68 @@ impl<T> SliceExt for [T] {
         from_raw_parts_mut(new_ptr, new_len)
     }
 }
+
+
+use shim::io::Cursor;
+pub struct FATCursor<T>(Cursor<T>);
+
+use core::ops::{Deref, DerefMut};
+impl<T> Deref for FATCursor<T> {
+    type Target = Cursor<T>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<T> DerefMut for FATCursor<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl<T> FATCursor<T> {
+    pub fn new(inner: T) -> FATCursor<T> {
+        FATCursor {
+            0: Cursor::new(inner)
+        }
+    }
+}
+
+
+use shim::io::Write;
+use shim::io;
+
+impl Write for FATCursor<Vec<u8>> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.get_mut().write(buf)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.get_mut().flush()
+    }
+}
+
+use alloc::boxed::Box;
+impl Write for FATCursor<Box<[u8]>> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let position = self.position() as usize;
+        let buffer = self.get_mut().as_mut();
+
+        if position >= buffer.len() {
+            return Err(io::Error::new(io::ErrorKind::WriteZero, "cursor out of bounds"));
+        }
+
+        let remaining_space = &mut buffer[position..];
+        let bytes_to_write = buf.len().min(remaining_space.len());
+        remaining_space[..bytes_to_write].copy_from_slice(&buf[..bytes_to_write]);
+        self.set_position((position + bytes_to_write) as u64);
+
+        Ok(bytes_to_write)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+

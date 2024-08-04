@@ -69,7 +69,7 @@ impl<'a, T: BlockDevice> BlockDevice for &'a mut T {
 use shim::io::{Seek, Read, Write};
 macro impl_for_read_write_seek($(<$($gen:tt),*>)* $T:path) {
 
-    impl $(<$($gen),*>)* BlockDevice for $T where $T: Write {
+    impl $(<$($gen),*>)* BlockDevice for $T{
         fn read_sector(&mut self, n: u64, buf: &mut [u8]) -> io::Result<usize> {
             let sector_size = self.sector_size();
             let to_read = ::core::cmp::min(sector_size as usize, buf.len());
@@ -88,62 +88,9 @@ macro impl_for_read_write_seek($(<$($gen:tt),*>)* $T:path) {
     }
 }
 
-use shim::io::Cursor;
-struct FATCursor<T>(Cursor<T>);
-
-use core::ops::{Deref, DerefMut};
-impl<T> Deref for FATCursor<T> {
-    type Target = Cursor<T>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl<T> DerefMut for FATCursor<T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
 
 
-
-impl Write for FATCursor<Vec<u8>> {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.get_mut().write(buf)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        self.get_mut().flush()
-    }
-}
-
-
-impl Write for FATCursor<Box<[u8]>> {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        let position = self.position() as usize;
-        let buffer = self.get_mut().as_mut();
-
-        if position >= buffer.len() {
-            return Err(io::Error::new(io::ErrorKind::WriteZero, "cursor out of bounds"));
-        }
-
-        let remaining_space = &mut buffer[position..];
-        let bytes_to_write = buf.len().min(remaining_space.len());
-        remaining_space[..bytes_to_write].copy_from_slice(&buf[..bytes_to_write]);
-        self.set_position((position + bytes_to_write) as u64);
-
-        Ok(bytes_to_write)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-}
-
-
-
-
+use crate::util::FATCursor;
 impl_for_read_write_seek!(<'a> FATCursor<&'a mut [u8]>);
 impl_for_read_write_seek!(FATCursor<Vec<u8>>);
 impl_for_read_write_seek!(FATCursor<Box<[u8]>>);
