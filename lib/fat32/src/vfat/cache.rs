@@ -19,7 +19,7 @@ pub struct Partition {
     pub num_sectors: u64,
     /// The size, in bytes, of a logical sector in the partition.
     pub sector_size: u64,
-} 
+}
 
 pub struct CachedPartition {
     device: Box<dyn BlockDevice>,
@@ -53,7 +53,7 @@ impl CachedPartition {
         CachedPartition {
             device: Box::new(device),
             cache: HashMap::new(),
-            partition: partition,
+            partition,
         }
     }
 
@@ -87,7 +87,19 @@ impl CachedPartition {
     ///
     /// Returns an error if there is an error reading the sector from the disk.
     pub fn get_mut(&mut self, sector: u64) -> io::Result<&mut [u8]> {
-        unimplemented!("CachedPartition::get_mut()")
+        
+        match self.cache.get_mut(&sector) {
+            Some(x) => {
+                (*x).dirty = true;
+            },
+            None => {
+                let mut data = vec![0 as u8, self.partition.sector_size as u8];
+                self.device.read_sector(self.virtual_to_physical(sector).expect("bad caller"), &mut data)?;
+                self.cache.insert(sector, CacheEntry { data, dirty: true });
+            }
+        }
+
+        Ok(&mut self.cache.get_mut(&sector).expect("key should exist").data)
     }
 
     /// Returns a reference to the cached sector `sector`. If the sector is not
@@ -97,7 +109,16 @@ impl CachedPartition {
     ///
     /// Returns an error if there is an error reading the sector from the disk.
     pub fn get(&mut self, sector: u64) -> io::Result<&[u8]> {
-        unimplemented!("CachedPartition::get()")
+        match self.cache.get_mut(&sector) {
+            Some(_) => {},
+            None => {
+                let mut data = vec![0 as u8, self.partition.sector_size as u8];
+                self.device.read_sector(self.virtual_to_physical(sector).expect("bad caller"), &mut data)?;
+                self.cache.insert(sector, CacheEntry { data, dirty: false });
+            }
+        }
+        Ok(&self.cache.get(&sector).expect("key should exist").data)
+
     }
 }
 
@@ -105,18 +126,28 @@ impl CachedPartition {
 // `write_sector` methods should only read/write from/to cached sectors.
 impl BlockDevice for CachedPartition {
     fn sector_size(&self) -> u64 {
-        unimplemented!()
+        if self.partition.sector_size % 512 != 0 {
+            panic!("Invalid CachedPartition sector size");
+        }
+        self.partition.sector_size
     }
 
     fn read_sector(&mut self, sector: u64, buf: &mut [u8]) -> io::Result<usize> {
-        unimplemented!()
+        let bytes_to_read = (self.sector_size() as usize).max(buf.len());
+        let sector = self.get(sector)?;
+        buf.copy_from_slice(&sector[..bytes_to_read]);
+        Ok(bytes_to_read)
     }
 
     fn write_sector(&mut self, sector: u64, buf: &[u8]) -> io::Result<usize> {
-        unimplemented!()
+        let bytes_to_write = (self.sector_size() as usize).max(buf.len());
+        let sector = self.get_mut(sector)?;
+        sector.copy_from_slice(&buf[..bytes_to_write]);
+        Ok(bytes_to_write)
     }
 }
 
+// why not derive debug?
 impl fmt::Debug for CachedPartition {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("CachedPartition")

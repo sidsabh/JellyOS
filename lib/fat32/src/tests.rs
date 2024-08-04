@@ -131,6 +131,8 @@ fn test_mbr() {
     let mut data = [0u8; 512];
     mbr.read_exact(&mut data).expect("read resource data");
     MasterBootRecord::from(FATCursor::new(&mut data[..])).expect("valid MBR");
+    // let mb = MasterBootRecord::from(FATCursor::new(&mut data[..])).expect("valid MBR");
+    // println!("{:#?}", mb);
 }
 
 #[test]
@@ -164,6 +166,8 @@ fn test_ebpb() {
 
     BiosParameterBlock::from(FATCursor::new(&mut data[..]), 0).expect("valid EBPB");
     BiosParameterBlock::from(FATCursor::new(&mut data[..]), 1).expect("valid EBPB");
+    // let bpb = BiosParameterBlock::from(FATCursor::new(&mut data[..]), 1).expect("valid EBPB");
+    // println!("{:#?}", bpb);
 }
 
 #[test]

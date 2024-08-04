@@ -20,7 +20,6 @@ impl Default for CHS {
     }
 }
 
-// FIXME: implement Debug for CHS
 
 const_assert_size!(CHS, 3);
 
@@ -35,7 +34,6 @@ pub struct PartitionEntry {
     total_sectors: u32,
 }
 
-// FIXME: implement Debug for PartitionEntry
 impl Default for PartitionEntry {
     fn default() -> PartitionEntry {
         PartitionEntry {
@@ -53,6 +51,7 @@ const_assert_size!(PartitionEntry, 16);
 
 /// The master boot record (MBR).
 #[repr(C, packed)]
+#[derive(Debug)]
 pub struct MasterBootRecord {
     mbr_boostrap: [u8; 436],
     disk_id: [u8; 10],
@@ -71,15 +70,6 @@ impl Default for MasterBootRecord {
     }
 }
 
-impl fmt::Debug for MasterBootRecord {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "MBR:\n\tdisk_id: {:?}\n\tpartition_table: {:?}\n\tsignature: {:?}",
-            self.disk_id, self.partition_table, self.signature
-        )
-    }
-}
 
 const_assert_size!(MasterBootRecord, 512);
 
