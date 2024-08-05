@@ -11,20 +11,20 @@ pub struct BiosParameterBlock {
     oem_identifier: u64,
     pub bytes_per_sector: u16,
     pub sectors_per_cluster: u8,
-    num_reserved_sectors: u16,
-    num_fats: u8,
+    pub num_reserved_sectors: u16,
+    pub num_fats: u8,
     max_dir_entries: u16,
     small_total_logical_sectors: u16,
     fat_id: u8,
     old_spf: u16, // sectors per fat previous fat32
     sectors_per_track: u16,
     num_heads: u16,
-    num_hidden_scectors : u32, // LBA of the beginning of the partition
+    num_hidden_sectors : u32, // LBA of the beginning of the partition
     num_logical_sectors : u32,
-    sectors_per_fat : u32,
+    pub sectors_per_fat : u32,
     flags : u16,
     version : u16,
-    root_dir_cluster : u32,
+    pub root_dir_cluster : u32,
     fsinfo_sector : u16,
     backup_boot_sector : u16,
     _reserved : [u8; 12],
@@ -56,7 +56,7 @@ impl Default for BiosParameterBlock {
             old_spf: 0,
             sectors_per_track: 0,
             num_heads: 0,
-            num_hidden_scectors: 0,
+            num_hidden_sectors: 0,
             num_logical_sectors: 0,
             sectors_per_fat: 0,
             flags: 0,
@@ -81,6 +81,7 @@ const_assert_size!(BiosParameterBlock, 512);
 const VALID_SIGNATURE: [u8; 2] = [0x55, 0xAA];
 
 use alloc::slice;
+
 impl BiosParameterBlock {
     /// Reads the FAT32 extended BIOS parameter block from sector `sector` of
     /// device `device`.

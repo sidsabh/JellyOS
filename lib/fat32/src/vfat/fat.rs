@@ -1,5 +1,6 @@
 use crate::vfat::*;
 use core::fmt;
+use std::ops::BitAnd;
 
 use self::Status::*;
 
@@ -25,7 +26,17 @@ pub struct FatEntry(pub u32);
 impl FatEntry {
     /// Returns the `Status` of the FAT entry `self`.
     pub fn status(&self) -> Status {
-        unimplemented!("FatEntry::status()")
+        let status = self.0.bitand(0x0FFFFFFF); // alignment
+        match status {
+            0x0000000 => Status::Free,
+            0x0000001 => Status::Reserved,
+            0x0000002..0xFFFFFF0 => Status::Data(Cluster::from(status)),
+            0xFFFFFF0..0xFFFFFF6 => Status::Reserved,
+            0xFFFFFF6 => Status::Reserved,
+            0xFFFFFF7 => Status::Bad,
+            0xFFFFFF8..0xFFFFFFF => Eoc(status),
+            invalid => panic!("FatEntry has invalid status: {}", invalid)
+        }
     }
 }
 

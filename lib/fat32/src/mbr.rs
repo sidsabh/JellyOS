@@ -3,6 +3,7 @@ use shim::const_assert_size;
 use shim::io;
 
 use crate::traits::BlockDevice;
+use crate::vfat::Partition;
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -20,7 +21,6 @@ impl Default for CHS {
     }
 }
 
-
 const_assert_size!(CHS, 3);
 
 #[repr(C, packed)]
@@ -30,8 +30,8 @@ pub struct PartitionEntry {
     start_chs: CHS,
     partition_type: u8,
     end_chs: CHS,
-    relative_sector: u32,
-    total_sectors: u32,
+    pub relative_sector: u32,
+    pub total_sectors: u32,
 }
 
 impl Default for PartitionEntry {
@@ -53,23 +53,22 @@ const_assert_size!(PartitionEntry, 16);
 #[repr(C, packed)]
 #[derive(Debug)]
 pub struct MasterBootRecord {
-    mbr_boostrap: [u8; 436],
-    disk_id: [u8; 10],
-    partition_table: [PartitionEntry; 4],
-    signature: [u8; 2],
+    pub mbr_boostrap: [u8; 436],
+    pub disk_id: [u8; 10],
+    pub partition_table: [PartitionEntry; 4],
+    pub signature: [u8; 2],
 }
 
 impl Default for MasterBootRecord {
     fn default() -> MasterBootRecord {
         MasterBootRecord {
-            mbr_boostrap : [0; 436],
+            mbr_boostrap: [0; 436],
             disk_id: [0; 10],
             partition_table: [PartitionEntry::default(); 4],
             signature: [0; 2],
         }
     }
 }
-
 
 const_assert_size!(MasterBootRecord, 512);
 
@@ -104,7 +103,9 @@ impl MasterBootRecord {
                 size_of::<MasterBootRecord>(),
             )
         };
-        device.read_sector(0, mbr_slice).map_err(|err| Error::Io(err))?;
+        device
+            .read_sector(0, mbr_slice)
+            .map_err(|err| Error::Io(err))?;
         if mbr.signature != VALID_SIGNATURE {
             return Err(Error::BadSignature);
         }
@@ -115,5 +116,22 @@ impl MasterBootRecord {
         }
 
         Ok(mbr)
+    }
+
+    /// Assuming we get the first valid FAT32 partition here!
+    pub fn get_fat32_partition(&self) -> Result<PartitionEntry, Error> {
+        if let Some(p) = self
+            .partition_table
+            .iter()
+            .find(|p| [0xB, 0xC].contains(&p.partition_type))
+        {
+            Ok(*p)
+        } else {
+            println!("{:#?}", self);
+            Err(Error::Io(io::Error::new(
+                io::ErrorKind::NotFound,
+                "No valid FAT32 partition",
+            )))
+        }
     }
 }
