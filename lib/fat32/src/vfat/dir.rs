@@ -9,6 +9,7 @@ use shim::newioerr;
 use crate::traits;
 use crate::traits::Dir as DirTrait;
 use crate::traits::Entry as EntryTrait;
+use crate::util::SliceExt;
 use crate::util::VecExt;
 use crate::vfat::{Attributes, Date, Metadata, Time, Timestamp};
 use crate::vfat::{CachedPartition, Cluster, Entry, File, VFatHandle};
@@ -105,10 +106,23 @@ pub struct DirIterator<HANDLE: VFatHandle> {
     vfat: HANDLE,
 }
 
+use core::mem::size_of;
 impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
     type Item = Entry<HANDLE>;
     fn next(&mut self) -> Option<Self::Item> {
         // TODO: might want to change to using some refs for the diriterator instead of reading entire thing?
+
+        let idx = size_of::<VFatDirEntry>()*self.index;
+        let data = &self.directory_data[idx..idx+1];
+        unsafe {
+            let entry: &[VFatDirEntry] = data.cast::<VFatDirEntry>();
+            let real = &entry[0];
+        }
+        // let e = self.directory_data
+        self.index += 1;
+
+        None
+
     }
 }
 
@@ -118,10 +132,11 @@ impl<HANDLE: VFatHandle> traits::Dir for Dir<HANDLE> {
 
     fn entries(&self) -> io::Result<Self::Iter> {
         // . You will likely need to use at-most one line of unsafe when implementing entries(); you may find the VecExt and SliceExt trait implementations we have provided particularly useful here.
+        // data.cast() ???
         let mut data: Vec<u8> = vec![];
         self.vfat.lock(|s|{
             s.read_chain(self.first_cluster, &mut data)
-        });
+        })?;
         Ok(DirIterator {
             directory_data: data,
             index: 0,
