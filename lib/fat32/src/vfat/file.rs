@@ -7,11 +7,36 @@ use crate::vfat::{Cluster, Metadata, VFatHandle};
 
 #[derive(Debug)]
 pub struct File<HANDLE: VFatHandle> {
-    pub vfat: HANDLE,
-    // FIXME: Fill me in.
+    pub vfat: HANDLE,           // file system handle
+    pub first_cluster: Cluster, // first cluster
+}
+
+impl<HANDLE: VFatHandle> io::Read for File<HANDLE> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        todo!()
+    }
+}
+
+impl<HANDLE: VFatHandle> io::Write for File<HANDLE> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        todo!()
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        todo!()
+    }
 }
 
 // FIXME: Implement `traits::File` (and its supertraits) for `File`.
+impl<HANDLE: VFatHandle> traits::File for File<HANDLE> {
+    fn sync(&mut self) -> io::Result<()> {
+        todo!()
+    }
+
+    fn size(&self) -> u64 {
+        todo!()
+    }
+}
 
 impl<HANDLE: VFatHandle> io::Seek for File<HANDLE> {
     /// Seek to offset `pos` in the file.
@@ -31,3 +56,4 @@ impl<HANDLE: VFatHandle> io::Seek for File<HANDLE> {
         unimplemented!("File::seek()")
     }
 }
+

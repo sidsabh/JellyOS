@@ -68,8 +68,9 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
     // Recommended
     fn cluster_start_sector(&mut self, cluster: Cluster) -> io::Result<u64> {
         let cluster_num: u32 = cluster.into();
-        let sfc = self.data_start_sector + ((cluster_num as u64) * self.sectors_per_cluster as u64);
-        // add error checking (return a sector out of range)
+        let sfc =
+            self.data_start_sector + (((cluster_num - 2) as u64) * self.sectors_per_cluster as u64); // sub 2 because cluster 2 is at data_start_sector
+                                                                                                     // add error checking (return a sector out of range)
         Ok(sfc)
     }
 
@@ -101,17 +102,28 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
     //  * A method to read all of the clusters chained from a starting cluster
     //    into a vector.
     //
-    fn read_chain(&mut self, start: Cluster, buf: &mut Vec<u8>) -> io::Result<usize> {
-
+    pub fn read_chain(&mut self, start: Cluster, buf: &mut Vec<u8>) -> io::Result<usize> {
         let mut curr_cluster = start;
         let mut bytes_read = 0;
-        
-        while let Status::Data(cluster) = self.fat_entry(curr_cluster)?.status() {
-            bytes_read += self.read_cluster(cluster, 0, buf)?;
 
-            let next_entry = self.fat_entry(cluster)?.0;
-            curr_cluster = Cluster::from(next_entry);
+        loop {
+            match self.fat_entry(curr_cluster)?.status() {
+                Status::Data(cluster) => {
+                    bytes_read += self.read_cluster(cluster, 0, buf)?;
+                    let next_entry = self.fat_entry(cluster)?.0;
+                    curr_cluster = Cluster::from(next_entry);
+                },
+                Status::Eoc(id) => {
+                    let cluster = Cluster::from(id);
+                    bytes_read += self.read_cluster(cluster, 0, buf)?;
+                    break;
+                },
+                other => {
+                    return Err(io::Error::new(io::ErrorKind::InvalidData, format!("Found cluster with status: {:#?}", other)));
+                }
+            }
         }
+
         Ok(bytes_read)
     }
     //
@@ -132,9 +144,9 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
 }
 
 impl<'a, HANDLE: VFatHandle> FileSystem for &'a HANDLE {
-    type File = crate::traits::Dummy;
-    type Dir = crate::traits::Dummy;
-    type Entry = crate::traits::Dummy;
+    type File = File<HANDLE>;
+    type Dir = Dir<HANDLE>;
+    type Entry = Entry<HANDLE>;
 
     fn open<P: AsRef<Path>>(self, path: P) -> io::Result<Self::Entry> {
         unimplemented!("FileSystem::open()")
