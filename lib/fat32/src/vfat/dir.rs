@@ -1,6 +1,7 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 
+use hashbrown::HashMap;
 use shim::const_assert_size;
 use shim::ffi::OsStr;
 use shim::io;
@@ -12,18 +13,20 @@ use crate::traits::Entry as EntryTrait;
 use crate::util::SliceExt;
 use crate::util::VecExt;
 use crate::vfat::{Attributes, Date, Metadata, Time, Timestamp};
-use crate::vfat::{CachedPartition, Cluster, Entry, File, VFatHandle};
+use crate::vfat::{CachedPartition, Cluster, Entry, Error, File, VFatHandle};
 
 #[derive(Debug)]
 pub struct Dir<HANDLE: VFatHandle> {
     pub vfat: HANDLE,           // file system handle
     pub first_cluster: Cluster, // first cluster
+    pub metadata: Metadata,
+    pub name: String,
 }
 
 #[repr(C, packed)]
 #[derive(Copy, Clone)]
 pub struct VFatRegularDirEntry {
-    file_name: u64,
+    file_name: [u8; 8],
     file_extension: [u8; 3],
     file_attributes: Attributes,
     reserved_win: u8,
@@ -42,7 +45,10 @@ const_assert_size!(VFatRegularDirEntry, 32);
 
 #[repr(C, packed)]
 #[derive(Copy, Clone)]
+/// Long file name (LFN) entries were added to FAT32 to allow for filenames greater than 11 characters in length.
+/// If an entry has a name greater than 11 characters in length, then its regular directory entry is preceded by as many LFN entries as needed to store the bytes for the entry’s name.
 pub struct VFatLfnDirEntry {
+    /// LFN entries are not ordered physically. Instead, they contain a field that indicates their sequence.
     sequence_num: u8,
     first_name_chars: [u8; 10],
     file_attributes: Attributes,
@@ -58,16 +64,16 @@ const_assert_size!(VFatLfnDirEntry, 32);
 #[repr(C, packed)]
 #[derive(Copy, Clone)]
 pub struct VFatUnknownDirEntry {
-    // ID of 0x00. Indicates the end of the directory.
+    /// ID of 0x00. Indicates the end of the directory.
     /// ID of 0xE5: Marks an unused/deleted entry.
     /// All other IDs make up part of the file’s name or LFN sequence number.
     file_id: u8,
-    _reserved : [u8; 10],
+    _reserved: [u8; 10],
     /// The byte at offset 11 determines whether the entry is a regular entry or an LFN entry.
     /// Value of 0x0F: entry is an LFN entry.
     /// All other values: entry is a regular entry.
     reg_or_lfn: u8,
-    _reserved2 : [u8; 20]
+    _reserved2: [u8; 20],
 }
 
 const_assert_size!(VFatUnknownDirEntry, 32);
@@ -91,38 +97,123 @@ impl<HANDLE: VFatHandle> Dir<HANDLE> {
     /// is returned.
     pub fn find<P: AsRef<OsStr>>(&self, name: P) -> io::Result<Entry<HANDLE>> {
         for entry in self.entries()? {
-            if OsStr::new(entry.name()).eq_ignore_ascii_case(name.as_ref()) { // bro what is this
+            if OsStr::new(entry.name()).eq_ignore_ascii_case(name.as_ref()) {
+                // bro what is this
                 return Ok(entry);
             }
         }
-        return Err(io::Error::new(io::ErrorKind::NotFound, "no entry with that name"));
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "no entry with that name",
+        ));
     }
 }
 
-
 pub struct DirIterator<HANDLE: VFatHandle> {
-    directory_data: Vec<u8>,
+    directory_data: Vec<VFatDirEntry>,
     index: usize,
     vfat: HANDLE,
+    done: bool,
 }
 
-use core::mem::size_of;
+// this is really something
 impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
     type Item = Entry<HANDLE>;
     fn next(&mut self) -> Option<Self::Item> {
-        // TODO: might want to change to using some refs for the diriterator instead of reading entire thing?
-
-        let idx = size_of::<VFatDirEntry>()*self.index;
-        let data = &self.directory_data[idx..idx+1];
-        unsafe {
-            let entry: &[VFatDirEntry] = data.cast::<VFatDirEntry>();
-            let real = &entry[0];
+        if self.done {
+            return None;
         }
-        // let e = self.directory_data
-        self.index += 1;
 
-        None
+        let mut name: String = String::new();
+        let mut lfn_data: HashMap<u8, Vec<u8>> = HashMap::new();
+        let regular_entry: VFatRegularDirEntry;
+        loop {
+            if self.index < self.directory_data.len() {
+                self.done = true;
+                return None;
+            }
 
+            let unknown_entry: VFatUnknownDirEntry =
+                unsafe { self.directory_data[self.index].unknown };
+
+            if unknown_entry.reg_or_lfn == 0x0F {
+                let mut local_data : Vec<u8> = Vec::new();
+                let lfn_entry: VFatLfnDirEntry =
+                    unsafe { self.directory_data[self.index].long_filename };
+                let idx = lfn_entry.sequence_num & 0xF;
+                let char_sets: Vec<&[u8]> = vec![
+                    &lfn_entry.first_name_chars[..],
+                    &lfn_entry.second_name_chars[..],
+                    &lfn_entry.third_name_chars[..],
+                ];
+                'outer: for char_set in char_sets {
+                    for ch in char_set {
+                        if [0x00, 0xFF].contains(&ch) {
+                            break 'outer;
+                        }
+                        local_data.push(*ch);
+                    }
+                }
+                lfn_data.insert(idx, local_data);
+
+                // TODO: if last entry, concatenate them then add to name
+
+            } else if (unknown_entry.file_id == 0x00) {
+                self.done = true;
+                return None;
+            } else {
+                // When parsing a directory entry’s name, you must manually add a . to the non-LFN based directory entries to demarcate the file’s extension.
+                // You should only add a . if the file’s extension is non-empty
+                regular_entry = unsafe { self.directory_data[self.index].regular };
+                for ch in regular_entry.file_name {
+                    name.push(ch.into());
+                }
+                if regular_entry.file_extension != [0, 0, 0] {
+                    name.push('.');
+                    for ch in regular_entry.file_name {
+                        if [0x00, 0x20].contains(&ch) {
+                            break;
+                        }
+                        name.push(ch.into());
+                    }
+                }
+                break;
+            }
+            self.index += 1;
+        }
+
+        // process regular entry
+        // get metadata
+        let metadata = Metadata {
+            attributes: regular_entry.file_attributes,
+            created_time: regular_entry.creation_time,
+            created_date: regular_entry.creation_date,
+            accessed_date: regular_entry.accessed_date,
+            modified_time: regular_entry.modification_time,
+            modified_date: regular_entry.modification_date,
+        };
+
+        // get first_cluster
+        let first_cluster: u32 =
+            regular_entry.low_cluster_num as u32 | (regular_entry.high_cluster_num << 16) as u32;
+
+        if regular_entry.file_attributes.0 == 0x10 {
+            // directory
+            return Some(Entry::DirEntry(Dir {
+                first_cluster: first_cluster.into(),
+                vfat: self.vfat.clone(),
+                metadata,
+                name,
+            }));
+        } else {
+            // file
+            return Some(Entry::FileEntry(File {
+                first_cluster: first_cluster.into(),
+                vfat: self.vfat.clone(),
+                metadata,
+                name,
+            }));
+        }
     }
 }
 
@@ -130,17 +221,17 @@ impl<HANDLE: VFatHandle> traits::Dir for Dir<HANDLE> {
     type Entry = Entry<HANDLE>;
     type Iter = DirIterator<HANDLE>;
 
+    /// . You will likely need to use at-most one line of unsafe when implementing entries();
+    /// you may find the VecExt and SliceExt trait implementations we have provided particularly useful here.
     fn entries(&self) -> io::Result<Self::Iter> {
-        // . You will likely need to use at-most one line of unsafe when implementing entries(); you may find the VecExt and SliceExt trait implementations we have provided particularly useful here.
-        // data.cast() ???
-        let mut data: Vec<u8> = vec![];
-        self.vfat.lock(|s|{
-            s.read_chain(self.first_cluster, &mut data)
-        })?;
+        let mut data: Vec<u8> = Vec::new();
+        self.vfat
+            .lock(|s| s.read_chain(self.first_cluster, &mut data))?;
         Ok(DirIterator {
-            directory_data: data,
+            directory_data: unsafe { data.cast::<VFatDirEntry>() },
             index: 0,
-            vfat: self.vfat.clone()
+            vfat: self.vfat.clone(),
+            done: false,
         })
     }
 }

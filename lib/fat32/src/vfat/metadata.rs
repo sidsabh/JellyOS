@@ -18,7 +18,7 @@ pub struct Time(u16);
 /// File attributes as represented in FAT32 on-disk structures.
 #[repr(C, packed)]
 #[derive(Default, Debug, Copy, Clone, PartialEq, Eq)]
-pub struct Attributes(u8);
+pub struct Attributes(pub u8);
 
 /// A structure containing a date and time.
 #[derive(Default, Copy, Clone, Debug, PartialEq, Eq)]

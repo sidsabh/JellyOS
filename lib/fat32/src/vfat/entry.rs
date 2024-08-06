@@ -1,6 +1,6 @@
 use crate::traits;
 use crate::vfat::{Dir as DirStruct, File as FileStruct, Metadata, VFatHandle};
-use core::fmt;
+
 
 // You can change this definition if you want
 #[derive(Debug)]
@@ -8,8 +8,6 @@ pub enum Entry<HANDLE: VFatHandle> {
     FileEntry(FileStruct<HANDLE>),
     DirEntry(DirStruct<HANDLE>),
 }
-
-// TODO: Implement any useful helper methods on `Entry`.
 
 impl<HANDLE: VFatHandle> traits::Entry for Entry<HANDLE> {
     type File = FileStruct<HANDLE>;

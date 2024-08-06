@@ -9,6 +9,8 @@ use crate::vfat::{Cluster, Metadata, VFatHandle};
 pub struct File<HANDLE: VFatHandle> {
     pub vfat: HANDLE,           // file system handle
     pub first_cluster: Cluster, // first cluster
+    pub metadata: Metadata,
+    pub name : String
 }
 
 impl<HANDLE: VFatHandle> io::Read for File<HANDLE> {
