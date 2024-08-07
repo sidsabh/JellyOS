@@ -1,3 +1,6 @@
+use std::char::decode_utf16;
+use std::ops::BitAnd;
+
 use alloc::string::String;
 use alloc::vec::Vec;
 
@@ -19,8 +22,8 @@ use crate::vfat::{CachedPartition, Cluster, Entry, Error, File, VFatHandle};
 pub struct Dir<HANDLE: VFatHandle> {
     pub vfat: HANDLE,           // file system handle
     pub first_cluster: Cluster, // first cluster
-    pub metadata: Metadata,
     pub name: String,
+    pub metadata: Option<Metadata>,
 }
 
 #[repr(C, packed)]
@@ -50,13 +53,13 @@ const_assert_size!(VFatRegularDirEntry, 32);
 pub struct VFatLfnDirEntry {
     /// LFN entries are not ordered physically. Instead, they contain a field that indicates their sequence.
     sequence_num: u8,
-    first_name_chars: [u8; 10],
+    first_name_chars: [u16; 5],
     file_attributes: Attributes,
     file_type: u8,
     checksum: u8,
-    second_name_chars: [u8; 12],
+    second_name_chars: [u16; 6],
     zeroes: u16,
-    third_name_chars: [u8; 4],
+    third_name_chars: [u16; 2],
 }
 
 const_assert_size!(VFatLfnDirEntry, 32);
@@ -125,10 +128,10 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
         }
 
         let mut name: String = String::new();
-        let mut lfn_data: HashMap<u8, Vec<u8>> = HashMap::new();
+        let mut lfn_data: HashMap<u8, Vec<u16>> = HashMap::new();
         let regular_entry: VFatRegularDirEntry;
         loop {
-            if self.index < self.directory_data.len() {
+            if self.index >= self.directory_data.len() {
                 self.done = true;
                 return None;
             }
@@ -137,28 +140,42 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
                 unsafe { self.directory_data[self.index].unknown };
 
             if unknown_entry.reg_or_lfn == 0x0F {
-                let mut local_data : Vec<u8> = Vec::new();
+                let mut local_data : Vec<u16> = Vec::new();
                 let lfn_entry: VFatLfnDirEntry =
                     unsafe { self.directory_data[self.index].long_filename };
                 let idx = lfn_entry.sequence_num & 0xF;
-                let char_sets: Vec<&[u8]> = vec![
-                    &lfn_entry.first_name_chars[..],
-                    &lfn_entry.second_name_chars[..],
-                    &lfn_entry.third_name_chars[..],
+                let temp_copy1 = lfn_entry.first_name_chars; 
+                let temp_copy2 = lfn_entry.second_name_chars; 
+                let temp_copy3 = lfn_entry.third_name_chars; 
+                let char_sets: Vec<&[u16]> = vec![
+                    &temp_copy1,
+                    &temp_copy2,
+                    &temp_copy3,
                 ];
                 'outer: for char_set in char_sets {
                     for ch in char_set {
-                        if [0x00, 0xFF].contains(&ch) {
+                        if [0x0000, 0xFF].contains(&ch) {
                             break 'outer;
                         }
                         local_data.push(*ch);
                     }
                 }
                 lfn_data.insert(idx, local_data);
+                self.index += 1;
+                if lfn_entry.sequence_num.bitand(0x40) == 0x40 {
+                    assert!(name.is_empty());
+                    for key in 1..lfn_data.len() {
+                        if let Some(data) = lfn_data.get(&(key as u8)) {
+                            for utf16_char in decode_utf16(data.clone()) {
+                                name.push(utf16_char.ok()?);
+                            }
+                        } else {
+                            return None; // error
+                        }
+                    }
 
-                // TODO: if last entry, concatenate them then add to name
-
-            } else if (unknown_entry.file_id == 0x00) {
+                }
+            } else if unknown_entry.file_id == 0x00 {
                 self.done = true;
                 return None;
             } else {
@@ -177,9 +194,9 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
                         name.push(ch.into());
                     }
                 }
+                self.index += 1;
                 break;
             }
-            self.index += 1;
         }
 
         // process regular entry
@@ -195,23 +212,28 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
 
         // get first_cluster
         let first_cluster: u32 =
-            regular_entry.low_cluster_num as u32 | (regular_entry.high_cluster_num << 16) as u32;
+            regular_entry.low_cluster_num as u32 | ((regular_entry.high_cluster_num as u32) << 16);
 
         if regular_entry.file_attributes.0 == 0x10 {
             // directory
             return Some(Entry::DirEntry(Dir {
                 first_cluster: first_cluster.into(),
                 vfat: self.vfat.clone(),
-                metadata,
+                metadata: Some(metadata),
                 name,
             }));
         } else {
             // file
+            let mut data: Vec<u8> = Vec::new();
+            self.vfat.lock(|s| s.read_chain(first_cluster.into(), &mut data)).ok()?;
             return Some(Entry::FileEntry(File {
                 first_cluster: first_cluster.into(),
                 vfat: self.vfat.clone(),
                 metadata,
                 name,
+                data,
+                offset: 0,
+                file_size: regular_entry.file_size as u64
             }));
         }
     }
@@ -225,8 +247,10 @@ impl<HANDLE: VFatHandle> traits::Dir for Dir<HANDLE> {
     /// you may find the VecExt and SliceExt trait implementations we have provided particularly useful here.
     fn entries(&self) -> io::Result<Self::Iter> {
         let mut data: Vec<u8> = Vec::new();
+        // Your file system is likely very memory intensive. To avoid running out of memory, ensure you’re using your bin allocator.
+        // TODO: why are we reading an entire chain into memory? we should only do this on demand.
         self.vfat
-            .lock(|s| s.read_chain(self.first_cluster, &mut data))?;
+            .lock(|s| s.read_chain(self.first_cluster, &mut data))?; // 
         Ok(DirIterator {
             directory_data: unsafe { data.cast::<VFatDirEntry>() },
             index: 0,

@@ -21,22 +21,41 @@ impl<HANDLE: VFatHandle> traits::Entry for Entry<HANDLE> {
     }
 
     fn metadata(&self) -> &Self::Metadata {
-        todo!()
+        match &self {
+            Entry::FileEntry(fe) => &fe.metadata,
+            Entry::DirEntry(de) => &de.metadata.as_ref().unwrap(),
+        }
     }
 
     fn as_file(&self) -> Option<&Self::File> {
-        todo!()
+        if let Self::FileEntry(fe) = &self {
+            Some(fe)
+        } else {
+            None
+        }
     }
 
     fn as_dir(&self) -> Option<&Self::Dir> {
-        todo!()
+        if let Self::DirEntry(de) = &self {
+            Some(de)
+        } else {
+            None
+        }
     }
 
     fn into_file(self) -> Option<Self::File> {
-        todo!()
+        if let Self::FileEntry(fe) = self {
+            Some(fe)
+        } else {
+            None
+        }
     }
 
     fn into_dir(self) -> Option<Self::Dir> {
-        todo!()
+        if let Self::DirEntry(de) = self {
+            Some(de)
+        } else {
+            None
+        }
     }
 }

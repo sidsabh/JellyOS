@@ -5,15 +5,14 @@ use core::mem::size_of;
 use alloc::vec::Vec;
 
 use shim::io;
-use shim::ioerr;
-use shim::newioerr;
 use shim::path;
 use shim::path::Path;
 
 use crate::mbr::MasterBootRecord;
+use crate::traits::Entry as EntryTrait;
 use crate::traits::{BlockDevice, FileSystem};
 use crate::util::SliceExt;
-use crate::vfat::{BiosParameterBlock, CachedPartition, Partition};
+use crate::vfat::{BiosParameterBlock, CachedPartition, Metadata, Partition};
 use crate::vfat::{Cluster, Dir, Entry, Error, FatEntry, File, Status};
 
 /// A generic trait that handles a critical section as a closure
@@ -98,6 +97,20 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
         }
         Ok(bytes_read)
     }
+    fn write_cluster(&mut self, cluster: Cluster, offset: usize, buf: &[u8]) -> io::Result<usize> {
+        let mut curr_sector =
+            self.cluster_start_sector(cluster)? + offset as u64 / self.bytes_per_sector as u64;
+        let mut curr_offset = offset % (self.bytes_per_sector as usize);
+
+        let mut bytes_read = 0;
+        for _ in 0..self.sectors_per_cluster {
+            bytes_read += self.device.write_sector(curr_sector, &buf[curr_offset..])?;
+
+            curr_offset += bytes_read;
+            curr_sector += 1;
+        }
+        Ok(bytes_read)
+    }
     //
     //  * A method to read all of the clusters chained from a starting cluster
     //    into a vector.
@@ -112,18 +125,46 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
                     bytes_read += self.read_cluster(cluster, 0, buf)?;
                     let next_entry = self.fat_entry(cluster)?.0;
                     curr_cluster = Cluster::from(next_entry);
-                },
+                }
                 Status::Eoc(id) => {
                     let cluster = Cluster::from(id);
                     bytes_read += self.read_cluster(cluster, 0, buf)?;
                     break;
-                },
+                }
                 other => {
-                    return Err(io::Error::new(io::ErrorKind::InvalidData, format!("Found cluster with status: {:#?}", other)));
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!("Found cluster with status: {:#?}", other),
+                    ));
                 }
             }
         }
+        Ok(bytes_read)
+    }
+    pub fn write_chain(&mut self, start: Cluster, buf: &Vec<u8>) -> io::Result<usize> {
+        let mut curr_cluster = start;
+        let mut bytes_read = 0;
 
+        loop {
+            match self.fat_entry(curr_cluster)?.status() {
+                Status::Data(cluster) => {
+                    bytes_read += self.write_cluster(cluster, 0, buf)?;
+                    let next_entry = self.fat_entry(cluster)?.0;
+                    curr_cluster = Cluster::from(next_entry);
+                }
+                Status::Eoc(id) => {
+                    let cluster = Cluster::from(id);
+                    bytes_read += self.write_cluster(cluster, 0, buf)?;
+                    break;
+                }
+                other => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!("Found cluster with status: {:#?}", other),
+                    ));
+                }
+            }
+        }
         Ok(bytes_read)
     }
     //
@@ -141,6 +182,15 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
         let fat_entry: &FatEntry = unsafe { &*(fv as *const u32 as *const FatEntry) };
         Ok(fat_entry)
     }
+
+    fn get_root_dir(&mut self, handle: &HANDLE) -> io::Result<Dir<HANDLE>> {
+        Ok(Dir {
+            first_cluster: self.rootdir_cluster,
+            vfat: handle.clone(),
+            name: "/".to_string(),
+            metadata: None,
+        })
+    }
 }
 
 impl<'a, HANDLE: VFatHandle> FileSystem for &'a HANDLE {
@@ -149,6 +199,24 @@ impl<'a, HANDLE: VFatHandle> FileSystem for &'a HANDLE {
     type Entry = Entry<HANDLE>;
 
     fn open<P: AsRef<Path>>(self, path: P) -> io::Result<Self::Entry> {
-        unimplemented!("FileSystem::open()")
+        let mut curr = Entry::DirEntry(self.lock(|s| s.get_root_dir(&self).unwrap()));
+        for component in path.as_ref().components().skip(1) {
+            match component {
+                // path::Component::Prefix(_) => todo!(),
+                // path::Component::RootDir => todo!(),
+                // path::Component::CurDir => todo!(),
+                // path::Component::ParentDir => todo!(),
+                path::Component::Normal(name) => {
+                    if let Some(dir) = curr.as_dir() {
+                        curr = dir.find(name)?;
+                    } else {
+                        return Err(io::Error::new(io::ErrorKind::NotFound, format!("Path {:?} not found", path.as_ref())))
+                    }
+                },
+                _ => return Err(io::Error::new(io::ErrorKind::NotFound, format!("Path {:?} not found", path.as_ref()))),
+            }
+        }
+        Ok(curr)
+
     }
 }

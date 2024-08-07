@@ -112,11 +112,12 @@ impl CachedPartition {
         match self.cache.get_mut(&sector) {
             Some(_) => {},
             None => {
-                let mut data = vec![0 as u8, self.partition.sector_size as u8];
+                let mut data = vec![0 as u8; self.partition.sector_size as usize];
                 self.device.read_sector(self.virtual_to_physical(sector).expect("bad caller"), &mut data)?;
                 self.cache.insert(sector, CacheEntry { data, dirty: false });
             }
         }
+        
         Ok(&self.cache.get(&sector).expect("key should exist").data)
 
     }
@@ -133,14 +134,15 @@ impl BlockDevice for CachedPartition {
     }
 
     fn read_sector(&mut self, sector: u64, buf: &mut [u8]) -> io::Result<usize> {
-        let bytes_to_read = (self.sector_size() as usize).max(buf.len());
+        let bytes_to_read = (self.sector_size() as usize).min(buf.len());
         let sector = self.get(sector)?;
-        buf.copy_from_slice(&sector[..bytes_to_read]);
+
+        buf.copy_from_slice(&(sector[..bytes_to_read]));
         Ok(bytes_to_read)
     }
 
     fn write_sector(&mut self, sector: u64, buf: &[u8]) -> io::Result<usize> {
-        let bytes_to_write = (self.sector_size() as usize).max(buf.len());
+        let bytes_to_write = (self.sector_size() as usize).min(buf.len());
         let sector = self.get_mut(sector)?;
         sector.copy_from_slice(&buf[..bytes_to_write]);
         Ok(bytes_to_write)
