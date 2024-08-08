@@ -19,7 +19,7 @@ pub struct File<HANDLE: VFatHandle> {
 impl<HANDLE: VFatHandle> io::Read for File<HANDLE> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let bytes_to_read = (self.data[self.offset..].len() as usize).min(buf.len());
-        buf.copy_from_slice(&self.data[self.offset..bytes_to_read]);
+        (buf[..bytes_to_read]).copy_from_slice(&self.data[self.offset..bytes_to_read]);
         Ok(bytes_to_read)
     }
 }

@@ -17,7 +17,10 @@ impl<HANDLE: VFatHandle> traits::Entry for Entry<HANDLE> {
     type Metadata = Metadata;
 
     fn name(&self) -> &str {
-        todo!()
+        match &self {
+            Entry::FileEntry(fe) => fe.name.as_str(),
+            Entry::DirEntry(de) => de.name.as_str(),
+        }
     }
 
     fn metadata(&self) -> &Self::Metadata {

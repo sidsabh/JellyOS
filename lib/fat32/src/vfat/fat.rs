@@ -31,11 +31,10 @@ impl FatEntry {
             0x0000000 => Status::Free,
             0x0000001 => Status::Reserved,
             0x0000002..0xFFFFFF0 => Status::Data(Cluster::from(status)),
-            0xFFFFFF0..0xFFFFFF6 => Status::Reserved,
-            0xFFFFFF6 => Status::Reserved,
+            0xFFFFFF0..0xFFFFFF7 => Status::Reserved,
             0xFFFFFF7 => Status::Bad,
-            0xFFFFFF8..0xFFFFFFF => Eoc(status),
-            invalid => panic!("FatEntry has invalid status: {}", invalid)
+            0xFFFFFF8..0x10000000 => Eoc(status),
+            invalid => panic!("FatEntry has invalid status: {:#x}", invalid)
         }
     }
 }

@@ -136,7 +136,6 @@ impl BlockDevice for CachedPartition {
     fn read_sector(&mut self, sector: u64, buf: &mut [u8]) -> io::Result<usize> {
         let bytes_to_read = (self.sector_size() as usize).min(buf.len());
         let sector = self.get(sector)?;
-
         buf.copy_from_slice(&(sector[..bytes_to_read]));
         Ok(bytes_to_read)
     }

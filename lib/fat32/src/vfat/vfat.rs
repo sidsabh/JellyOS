@@ -80,20 +80,15 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
         &mut self,
         cluster: Cluster,
         offset: usize,
-        buf: &mut [u8],
+        buf: &mut Vec<u8>,
     ) -> io::Result<usize> {
-        let mut curr_sector =
+        let curr_sector =
             self.cluster_start_sector(cluster)? + offset as u64 / self.bytes_per_sector as u64;
-        let mut curr_offset = offset % (self.bytes_per_sector as usize);
-
         let mut bytes_read = 0;
-        for _ in 0..self.sectors_per_cluster {
+        for i in 0..self.sectors_per_cluster {
             bytes_read += self
                 .device
-                .read_sector(curr_sector, &mut buf[curr_offset..])?;
-
-            curr_offset += bytes_read;
-            curr_sector += 1;
+                .read_all_sector(curr_sector+i as u64, buf)?;
         }
         Ok(bytes_read)
     }
@@ -120,21 +115,18 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
         let mut bytes_read = 0;
 
         loop {
+            bytes_read += self.read_cluster(curr_cluster, 0, buf)?;
             match self.fat_entry(curr_cluster)?.status() {
                 Status::Data(cluster) => {
-                    bytes_read += self.read_cluster(cluster, 0, buf)?;
-                    let next_entry = self.fat_entry(cluster)?.0;
-                    curr_cluster = Cluster::from(next_entry);
+                    curr_cluster = cluster;
                 }
-                Status::Eoc(id) => {
-                    let cluster = Cluster::from(id);
-                    bytes_read += self.read_cluster(cluster, 0, buf)?;
+                Status::Eoc(_) => {
                     break;
                 }
                 other => {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidData,
-                        format!("Found cluster with status: {:#?}", other),
+                        format!("Reading: found cluster with status: {:#?}", other),
                     ));
                 }
             }
@@ -160,7 +152,7 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
                 other => {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidData,
-                        format!("Found cluster with status: {:#?}", other),
+                        format!("Writing: found cluster with status: {:#?}", other),
                     ));
                 }
             }
@@ -175,11 +167,11 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
         let cluster_num: u32 = cluster.into();
         let entries_per_sector = self.bytes_per_sector / size_of::<u32>() as u16;
         let fat_sector = self.fat_start_sector + (cluster_num as u64 / entries_per_sector as u64);
-        let mut buf = vec![0 as u8; self.bytes_per_sector as usize];
-        self.device.read_sector(fat_sector, &mut buf)?;
-        let mod_buf = unsafe { buf.cast::<u32>() };
-        let fv: &u32 = &mod_buf[(cluster_num as usize) % entries_per_sector as usize];
-        let fat_entry: &FatEntry = unsafe { &*(fv as *const u32 as *const FatEntry) };
+        let mut buf: Vec<u32> = vec![0 as u32; self.bytes_per_sector as usize / size_of::<u32>()];
+        let mod_buf = unsafe { buf.cast_mut::<u8>() };
+        self.device.read_sector(fat_sector, mod_buf)?;
+        let fv: &u32 = &buf[(cluster_num as usize) % entries_per_sector as usize];
+        let fat_entry: &FatEntry = unsafe { &*(&FatEntry(*fv) as *const FatEntry) };
         Ok(fat_entry)
     }
 
@@ -210,13 +202,20 @@ impl<'a, HANDLE: VFatHandle> FileSystem for &'a HANDLE {
                     if let Some(dir) = curr.as_dir() {
                         curr = dir.find(name)?;
                     } else {
-                        return Err(io::Error::new(io::ErrorKind::NotFound, format!("Path {:?} not found", path.as_ref())))
+                        return Err(io::Error::new(
+                            io::ErrorKind::NotFound,
+                            format!("Path {:?} not found", path.as_ref()),
+                        ));
                     }
-                },
-                _ => return Err(io::Error::new(io::ErrorKind::NotFound, format!("Path {:?} not found", path.as_ref()))),
+                }
+                _ => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::NotFound,
+                        format!("Path {:?} not found", path.as_ref()),
+                    ))
+                }
             }
         }
         Ok(curr)
-
     }
 }

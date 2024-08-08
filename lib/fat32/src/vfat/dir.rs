@@ -140,18 +140,14 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
                 unsafe { self.directory_data[self.index].unknown };
 
             if unknown_entry.reg_or_lfn == 0x0F {
-                let mut local_data : Vec<u16> = Vec::new();
+                let mut local_data: Vec<u16> = Vec::new();
                 let lfn_entry: VFatLfnDirEntry =
                     unsafe { self.directory_data[self.index].long_filename };
                 let idx = lfn_entry.sequence_num & 0xF;
-                let temp_copy1 = lfn_entry.first_name_chars; 
-                let temp_copy2 = lfn_entry.second_name_chars; 
-                let temp_copy3 = lfn_entry.third_name_chars; 
-                let char_sets: Vec<&[u16]> = vec![
-                    &temp_copy1,
-                    &temp_copy2,
-                    &temp_copy3,
-                ];
+                let temp_copy1 = lfn_entry.first_name_chars;
+                let temp_copy2 = lfn_entry.second_name_chars;
+                let temp_copy3 = lfn_entry.third_name_chars;
+                let char_sets: Vec<&[u16]> = vec![&temp_copy1, &temp_copy2, &temp_copy3];
                 'outer: for char_set in char_sets {
                     for ch in char_set {
                         if [0x0000, 0xFF].contains(&ch) {
@@ -164,7 +160,10 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
                 self.index += 1;
                 if lfn_entry.sequence_num.bitand(0x40) == 0x40 {
                     assert!(name.is_empty());
-                    for key in 1..lfn_data.len() {
+                    let mut p = lfn_data.len();
+                    p += 1;
+
+                    for key in 1..p {
                         if let Some(data) = lfn_data.get(&(key as u8)) {
                             for utf16_char in decode_utf16(data.clone()) {
                                 name.push(utf16_char.ok()?);
@@ -173,7 +172,6 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
                             return None; // error
                         }
                     }
-
                 }
             } else if unknown_entry.file_id == 0x00 {
                 self.done = true;
@@ -181,20 +179,29 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
             } else {
                 // When parsing a directory entry’s name, you must manually add a . to the non-LFN based directory entries to demarcate the file’s extension.
                 // You should only add a . if the file’s extension is non-empty
+                // You should only add a . if the file’s extension is non-empty
                 regular_entry = unsafe { self.directory_data[self.index].regular };
+                self.index += 1;
+                if !name.is_empty() {
+                    break;
+                } // assigned as LFN. can do checksum here as well
+                let bad = [0x00, 0x20];
                 for ch in regular_entry.file_name {
+                    if bad.contains(&ch) {
+                        break;
+                    }
                     name.push(ch.into());
                 }
-                if regular_entry.file_extension != [0, 0, 0] {
+                let bad = [0x20, 0x20, 0x20];
+                if regular_entry.file_extension != bad {
                     name.push('.');
-                    for ch in regular_entry.file_name {
+                    for ch in regular_entry.file_extension {
                         if [0x00, 0x20].contains(&ch) {
                             break;
                         }
                         name.push(ch.into());
                     }
                 }
-                self.index += 1;
                 break;
             }
         }
@@ -225,7 +232,12 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
         } else {
             // file
             let mut data: Vec<u8> = Vec::new();
-            self.vfat.lock(|s| s.read_chain(first_cluster.into(), &mut data)).ok()?;
+            if first_cluster != 0 {
+                // Volume Label
+                self.vfat
+                    .lock(|s| s.read_chain(first_cluster.into(), &mut data))
+                    .ok()?;
+            }
             return Some(Entry::FileEntry(File {
                 first_cluster: first_cluster.into(),
                 vfat: self.vfat.clone(),
@@ -233,7 +245,7 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
                 name,
                 data,
                 offset: 0,
-                file_size: regular_entry.file_size as u64
+                file_size: regular_entry.file_size as u64,
             }));
         }
     }
@@ -250,7 +262,7 @@ impl<HANDLE: VFatHandle> traits::Dir for Dir<HANDLE> {
         // Your file system is likely very memory intensive. To avoid running out of memory, ensure you’re using your bin allocator.
         // TODO: why are we reading an entire chain into memory? we should only do this on demand.
         self.vfat
-            .lock(|s| s.read_chain(self.first_cluster, &mut data))?; // 
+            .lock(|s| s.read_chain(self.first_cluster, &mut data))?; //
         Ok(DirIterator {
             directory_data: unsafe { data.cast::<VFatDirEntry>() },
             index: 0,
