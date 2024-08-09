@@ -1,4 +1,5 @@
 use core::fmt;
+use std::ops::BitAnd;
 
 use alloc::string::String;
 
@@ -43,7 +44,7 @@ impl traits::Timestamp for Timestamp {
     fn year(&self) -> usize {
         // Bits 15-9 represent the year offset from 1980
         let val = (self.date.0 >> 9) & 0x7F;
-        (val as usize) - 1980
+        (val as usize) + 1980
     }
 
     fn month(&self) -> u8 {
@@ -93,11 +94,11 @@ impl traits::Metadata for Metadata {
     type Timestamp = Timestamp;
 
     fn read_only(&self) -> bool {
-        self.attributes.0 == 0x01
+        self.attributes.0.bitand(0x01) == 0x01
     }
 
     fn hidden(&self) -> bool {
-        self.attributes.0 == 0x02
+        self.attributes.0.bitand(0x02) == 0x02
     }
 
     fn created(&self) -> Self::Timestamp {
