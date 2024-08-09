@@ -3,6 +3,7 @@ use core::marker::PhantomData;
 use core::mem::size_of;
 
 use alloc::vec::Vec;
+use alloc::string::String;
 
 use shim::io;
 use shim::path;
@@ -123,10 +124,10 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
                 Status::Eoc(_) => {
                     break;
                 }
-                other => {
+                _ => {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidData,
-                        format!("Reading: found cluster with status: {:#?}", other),
+                        "Reading: found cluster with status",
                     ));
                 }
             }
@@ -149,10 +150,10 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
                     bytes_read += self.write_cluster(cluster, 0, buf)?;
                     break;
                 }
-                other => {
+                _ => {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidData,
-                        format!("Writing: found cluster with status: {:#?}", other),
+                        "Writing: found cluster with status: {:#?}",
                     ));
                 }
             }
@@ -179,7 +180,7 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
         Ok(Dir {
             first_cluster: self.rootdir_cluster,
             vfat: handle.clone(),
-            name: "/".to_string(),
+            name: String::from("/"),
             metadata: None,
         })
     }
@@ -204,14 +205,14 @@ impl<'a, HANDLE: VFatHandle> FileSystem for &'a HANDLE {
                     } else {
                         return Err(io::Error::new(
                             io::ErrorKind::NotFound,
-                            format!("Path {:?} not found", path.as_ref()),
+                            "Path not found",
                         ));
                     }
                 }
                 _ => {
                     return Err(io::Error::new(
                         io::ErrorKind::NotFound,
-                        format!("Path {:?} not found", path.as_ref()),
+                        "Path not found",
                     ))
                 }
             }

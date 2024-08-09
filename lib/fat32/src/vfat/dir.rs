@@ -100,7 +100,7 @@ impl<HANDLE: VFatHandle> Dir<HANDLE> {
     /// is returned.
     pub fn find<P: AsRef<OsStr>>(&self, name: P) -> io::Result<Entry<HANDLE>> {
         for entry in self.entries()? {
-            if OsStr::new(entry.name()).eq_ignore_ascii_case(name.as_ref()) {
+            if entry.name().eq_ignore_ascii_case(name.as_ref().to_str().expect("failed to get str from osstr")) {
                 // bro what is this
                 return Ok(entry);
             }

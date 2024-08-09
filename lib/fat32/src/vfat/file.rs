@@ -60,7 +60,7 @@ impl<HANDLE: VFatHandle> io::Seek for File<HANDLE> {
                     self.offset = new as usize;
                     Ok(self.offset as u64)
                 } else {
-                    Err(io::Error::new(io::ErrorKind::InvalidInput, format!("SeekFrom::Start overflowed at {}", new)))
+                    Err(io::Error::new(io::ErrorKind::InvalidInput, "SeekFrom::Start overflowed"))
                 }
             },
             SeekFrom::End(sub) => {
@@ -68,12 +68,12 @@ impl<HANDLE: VFatHandle> io::Seek for File<HANDLE> {
                     self.offset = self.data.len() + (sub.abs() as usize);
                     Ok(self.offset as u64)
                 } else {
-                    Err(io::Error::new(io::ErrorKind::InvalidInput, format!("SeekFrom::End overflowed at {}", sub)))
+                    Err(io::Error::new(io::ErrorKind::InvalidInput, "SeekFrom::End overflowed"))
                 }
             },
             SeekFrom::Current(add_curr) => {
                 if add_curr.is_negative() && self.offset < add_curr.abs() as usize {
-                    Err(io::Error::new(io::ErrorKind::InvalidInput, format!("SeekFrom::Current overflowed at {}", add_curr)))
+                    Err(io::Error::new(io::ErrorKind::InvalidInput, "SeekFrom::Current overflowed"))
                 } else {
                     self.offset = ((self.offset as i64)+add_curr) as usize;
                     Ok(self.offset as u64)
