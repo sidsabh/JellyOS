@@ -1,6 +1,6 @@
 use crate::vfat::*;
 use core::fmt;
-use std::ops::BitAnd;
+use core::ops::BitAnd;
 
 use self::Status::*;
 
