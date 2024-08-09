@@ -357,7 +357,7 @@ fn hash_files_recursive<P: AsRef<Path>>(
     entries.sort_by(|a, b| a.name().cmp(b.name()));
     for entry in entries {
         let path = path.join(entry.name());
-        if entry.is_file() && !entry.name().starts_with(".BC.T") {
+        if entry.is_file() && !entry.name().starts_with("fseventsd") && !entry.name().starts_with(".BC.T") { // mac/linux fs logs
             use std::fmt::Write;
             let file = entry.into_file().unwrap();
             if file.size() < (1 << 20) {

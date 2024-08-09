@@ -100,7 +100,11 @@ impl<HANDLE: VFatHandle> Dir<HANDLE> {
     /// is returned.
     pub fn find<P: AsRef<OsStr>>(&self, name: P) -> io::Result<Entry<HANDLE>> {
         for entry in self.entries()? {
-            if entry.name().eq_ignore_ascii_case(name.as_ref().to_str().expect("failed to get str from osstr")) {
+            if entry.name().eq_ignore_ascii_case(
+                name.as_ref()
+                    .to_str()
+                    .expect("failed to get str from osstr"),
+            ) {
                 // bro what is this
                 return Ok(entry);
             }
@@ -130,17 +134,15 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
         let mut name: String = String::new();
         let mut lfn_data: HashMap<u8, Vec<u16>> = HashMap::new();
         let regular_entry: VFatRegularDirEntry;
-        let mut counter : i32 = 0;
+        let mut counter: i32 = 0;
         loop {
-            if self.index >= self.directory_data.len() {
-                self.done = true;
-                return None;
-            }
-
             let unknown_entry: VFatUnknownDirEntry =
                 unsafe { self.directory_data[self.index].unknown };
 
-            if unknown_entry.reg_or_lfn == 0x0F {
+            if unknown_entry.file_id == 0xE5 {
+                self.index += 1;
+                continue;
+            } else if unknown_entry.reg_or_lfn.bitand(0x0F) == 0x0F {
                 let mut local_data: Vec<u16> = Vec::new();
                 let lfn_entry: VFatLfnDirEntry =
                     unsafe { self.directory_data[self.index].long_filename };
@@ -164,7 +166,8 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
                 } else {
                     counter += 1;
                 }
-                if counter == -1 { // math
+                if counter == -1 {
+                    // math
                     assert!(name.is_empty());
                     let mut p = lfn_data.len();
                     p += 1;
