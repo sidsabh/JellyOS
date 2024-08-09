@@ -19,7 +19,8 @@ pub struct File<HANDLE: VFatHandle> {
 impl<HANDLE: VFatHandle> io::Read for File<HANDLE> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let bytes_to_read = (self.data[self.offset..].len() as usize).min(buf.len());
-        (buf[..bytes_to_read]).copy_from_slice(&self.data[self.offset..bytes_to_read]);
+        (buf[..bytes_to_read]).copy_from_slice(&self.data[self.offset..self.offset+bytes_to_read]);
+        self.offset += bytes_to_read;
         Ok(bytes_to_read)
     }
 }
@@ -27,7 +28,8 @@ impl<HANDLE: VFatHandle> io::Read for File<HANDLE> {
 impl<HANDLE: VFatHandle> io::Write for File<HANDLE> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         let bytes_to_write = (self.data[self.offset..].len() as usize).min(buf.len());
-        self.data[self.offset..bytes_to_write].copy_from_slice(&buf);
+        self.data[self.offset..self.offset+bytes_to_write].copy_from_slice(&buf);
+        self.offset += bytes_to_write;
         Ok(bytes_to_write)
     }
 

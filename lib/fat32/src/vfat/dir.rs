@@ -130,6 +130,7 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
         let mut name: String = String::new();
         let mut lfn_data: HashMap<u8, Vec<u16>> = HashMap::new();
         let regular_entry: VFatRegularDirEntry;
+        let mut counter : i32 = 0;
         loop {
             if self.index >= self.directory_data.len() {
                 self.done = true;
@@ -150,7 +151,7 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
                 let char_sets: Vec<&[u16]> = vec![&temp_copy1, &temp_copy2, &temp_copy3];
                 'outer: for char_set in char_sets {
                     for ch in char_set {
-                        if [0x0000, 0xFF].contains(&ch) {
+                        if [0x0000, 0xFFFF].contains(&ch) {
                             break 'outer;
                         }
                         local_data.push(*ch);
@@ -159,6 +160,11 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
                 lfn_data.insert(idx, local_data);
                 self.index += 1;
                 if lfn_entry.sequence_num.bitand(0x40) == 0x40 {
+                    counter -= idx as i32;
+                } else {
+                    counter += 1;
+                }
+                if counter == -1 { // math
                     assert!(name.is_empty());
                     let mut p = lfn_data.len();
                     p += 1;
@@ -221,7 +227,7 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
         let first_cluster: u32 =
             regular_entry.low_cluster_num as u32 | ((regular_entry.high_cluster_num as u32) << 16);
 
-        if regular_entry.file_attributes.0 == 0x10 {
+        if regular_entry.file_attributes.0.bitand(0x10) == 0x10 {
             // directory
             return Some(Entry::DirEntry(Dir {
                 first_cluster: first_cluster.into(),
@@ -243,7 +249,7 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
                 vfat: self.vfat.clone(),
                 metadata,
                 name,
-                data,
+                data: data[..(regular_entry.file_size as usize)].to_vec(),
                 offset: 0,
                 file_size: regular_entry.file_size as u64,
             }));
