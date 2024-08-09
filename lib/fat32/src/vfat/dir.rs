@@ -1,5 +1,5 @@
-use std::char::decode_utf16;
-use std::ops::BitAnd;
+use core::char::decode_utf16;
+use core::ops::BitAnd;
 
 use alloc::string::String;
 use alloc::vec::Vec;

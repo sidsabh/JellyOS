@@ -127,7 +127,6 @@ impl MasterBootRecord {
         {
             Ok(*p)
         } else {
-            println!("{:#?}", self);
             Err(Error::Io(io::Error::new(
                 io::ErrorKind::NotFound,
                 "No valid FAT32 partition",
