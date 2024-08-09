@@ -130,9 +130,7 @@ fn test_mbr() {
     let mut mbr = resource!("mbr.img");
     let mut data = [0u8; 512];
     mbr.read_exact(&mut data).expect("read resource data");
-    // MasterBootRecord::from(FATCursor::new(&mut data[..])).expect("valid MBR");
-    let mb = MasterBootRecord::from(FATCursor::new(&mut data[..])).expect("valid MBR");
-    println!("{:#?}", mb);
+    MasterBootRecord::from(FATCursor::new(&mut data[..])).expect("valid MBR");
 }
 
 #[test]
@@ -165,9 +163,7 @@ fn test_ebpb() {
         .expect("read resource data");
 
     BiosParameterBlock::from(FATCursor::new(&mut data[..]), 0).expect("valid EBPB");
-    // BiosParameterBlock::from(FATCursor::new(&mut data[..]), 1).expect("valid EBPB");
-    let bpb = BiosParameterBlock::from(FATCursor::new(&mut data[..]), 1).expect("valid EBPB");
-    println!("{:#?}", bpb);
+    BiosParameterBlock::from(FATCursor::new(&mut data[..]), 1).expect("valid EBPB");
 }
 
 #[test]
@@ -357,7 +353,7 @@ fn hash_files_recursive<P: AsRef<Path>>(
     entries.sort_by(|a, b| a.name().cmp(b.name()));
     for entry in entries {
         let path = path.join(entry.name());
-        if entry.is_file() && !entry.name().starts_with("fseventsd") && !entry.name().starts_with(".BC.T") { // mac/linux fs logs
+        if entry.is_file() && !entry.name().starts_with(".BC.T") {
             use std::fmt::Write;
             let file = entry.into_file().unwrap();
             if file.size() < (1 << 20) {

@@ -65,7 +65,7 @@ impl traits::Timestamp for Timestamp {
 
     fn minute(&self) -> u8 {
         // Bits 10-5 represent the minutes
-        ((self.time.0 >> 5) & 0x1F) as u8
+        ((self.time.0 >> 5) & 0x3F) as u8
     }
 
     fn second(&self) -> u8 {

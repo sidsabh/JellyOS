@@ -243,9 +243,10 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
             let mut data: Vec<u8> = Vec::new();
             if first_cluster != 0 {
                 // Volume Label
-                self.vfat
+                let br = self.vfat
                     .lock(|s| s.read_chain(first_cluster.into(), &mut data))
                     .ok()?;
+                assert!(br >= regular_entry.file_size as usize);
             }
             return Some(Entry::FileEntry(File {
                 first_cluster: first_cluster.into(),

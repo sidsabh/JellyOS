@@ -65,6 +65,7 @@ impl<'a, T: BlockDevice> BlockDevice for &'a mut T {
     fn write_sector(&mut self, n: u64, buf: &[u8]) -> io::Result<usize> {
         (*self).write_sector(n, buf)
     }
+    
 }
 use shim::io::{Seek, Read, Write};
 macro impl_for_read_write_seek($(<$($gen:tt),*>)* $T:path) {
