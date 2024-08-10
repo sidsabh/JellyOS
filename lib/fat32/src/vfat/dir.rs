@@ -260,7 +260,6 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
         }
     }
 }
-
 impl<HANDLE: VFatHandle> traits::Dir for Dir<HANDLE> {
     type Entry = Entry<HANDLE>;
     type Iter = DirIterator<HANDLE>;

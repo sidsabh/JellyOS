@@ -22,6 +22,7 @@ pub mod fs;
 pub mod mutex;
 pub mod shell;
 
+use fat32::traits::{Dir, Entry, FileSystem as FileSystemTrait};
 use shell::shell;
 use shim::io::Write;
 
@@ -45,16 +46,24 @@ fn kmain() -> ! {
 
     unsafe {
         ALLOCATOR.initialize();
-        // FILESYSTEM.initialize();
+        FILESYSTEM.initialize();
     }
 
-    use alloc::vec::Vec;
 
-    // let mut v = Vec::new();
-    // for i in 0..50 {
-    //     v.push(i);
-    //     kprintln!("{:?}", v);
-    // }
+    use alloc::vec::Vec;
+    let mut entries = FILESYSTEM
+        .open_dir("/")
+        .expect("directory")
+        .entries()
+        .expect("entries interator")
+        .collect::<Vec<_>>();
+    kprintln!("{}", entries.len());
+    entries.sort_by(|a, b| a.name().cmp(b.name()));
+    for (i, entry) in entries.iter().enumerate() {
+        kprintln!("{} {} {}", i, entry.name(), entry.metadata());
+    }
+
+
 
     shell(">");
 }

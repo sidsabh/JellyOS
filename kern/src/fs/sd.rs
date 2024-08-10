@@ -6,7 +6,7 @@ use fat32::traits::BlockDevice;
 
 extern "C" {
     /// A global representing the last SD controller error that occured.
-    static sd_err: i64;
+    static sd_err: i64; // TODO: process this
 
     /// Initializes the SD card controller.
     ///
@@ -29,8 +29,17 @@ extern "C" {
     fn sd_readsector(n: i32, buffer: *mut u8) -> i32;
 }
 
+
+use pi::timer::spin_sleep;
+
+use crate::console::kprintln;
 // FIXME: Define a `#[no_mangle]` `wait_micros` function for use by `libsd`.
 // The `wait_micros` C signature is: `void wait_micros(unsigned int);`
+#[no_mangle]
+fn wait_micros(us : u32) {
+    kprintln!("called");
+    spin_sleep(Duration::from_micros(us.into()));
+}
 
 /// A handle to an SD card controller.
 #[derive(Debug)]
@@ -43,7 +52,24 @@ impl Sd {
     /// with atomic memory access, but we can't use it yet since we haven't
     /// written the memory management unit (MMU).
     pub unsafe fn new() -> Result<Sd, io::Error> {
-        unimplemented!("Sd::new()")
+        match unsafe {sd_init()} {
+            0 => {
+                // use alloc::vec;
+                // let mut buf = vec![0 as u8; 512];
+                // res.read_sector(0, buf.as_mut_slice())?;
+                // kprintln!("{:#?}", buf);
+                Ok(Sd)
+            },
+            -1 => {
+                Err(io::Error::new(io::ErrorKind::TimedOut, "SD Card initialization timed out"))
+            },
+            -2 => {
+                Err(io::Error::new(io::ErrorKind::ConnectionRefused, "SD Card did not recieve commands"))
+            },
+            _ => {
+                Err(io::Error::new(io::ErrorKind::Uncategorized, "Unknown error"))
+            }
+        }
     }
 }
 
@@ -61,7 +87,9 @@ impl BlockDevice for Sd {
     ///
     /// An error of kind `Other` is returned for all other errors.
     fn read_sector(&mut self, n: u64, buf: &mut [u8]) -> io::Result<usize> {
-        unimplemented!("Sd::read_sector()")
+        kprintln!("reading sd sector: {}", n);
+        let bytes_read = unsafe { sd_readsector(n.try_into().unwrap(), buf as *mut [u8] as *mut u8) };
+        Ok(bytes_read.try_into().unwrap())
     }
 
     fn write_sector(&mut self, _n: u64, _buf: &[u8]) -> io::Result<usize> {

@@ -50,19 +50,23 @@ impl Allocator {
 
 unsafe impl GlobalAlloc for Allocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        let aligned_layout = Layout::from_size_align(layout.size(), layout.align().max(4))
+            .expect("Invalid layout for allocation");
         self.0
             .lock()
             .as_mut()
             .expect("allocator uninitialized")
-            .alloc(layout)
+            .alloc(aligned_layout)
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        let aligned_layout = Layout::from_size_align(layout.size(), layout.align().max(4))
+            .expect("Invalid layout for deallocation");
         self.0
             .lock()
             .as_mut()
             .expect("allocator uninitialized")
-            .dealloc(ptr, layout);
+            .dealloc(ptr, aligned_layout);
     }
 }
 
@@ -85,9 +89,9 @@ pub fn memory_map() -> Option<(usize, usize)> {
         Some(atag) => {
             let mem = atag.mem().unwrap();
             // kprintln!("{} {}", binary_end, (mem.size as usize)-binary_end);
-            Some((binary_end, (mem.size as usize)-binary_end))
-        },
-        None => None
+            Some((binary_end, (mem.size as usize) - binary_end))
+        }
+        None => None,
     }
 }
 

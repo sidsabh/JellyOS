@@ -24,8 +24,8 @@ check:
 	@cargo check
 
 qemu: build
-	./qemu.sh build/$(KERN).bin
-	@# ./qemu.sh build/$(KERN).bin -drive file=$(SDCARD),format=raw,if=sd $(QEMU_ARGS)
+	@# ./qemu.sh build/$(KERN).bin
+	./qemu.sh build/$(KERN).bin -drive file=$(SDCARD),format=raw,if=sd $(QEMU_ARGS)
 
 qemu-gdb: build
 	./qemu.sh build/$(KERN).bin -drive file=$(SDCARD),format=raw,if=sd -s -S

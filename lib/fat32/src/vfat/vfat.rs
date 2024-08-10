@@ -16,6 +16,8 @@ use crate::util::SliceExt;
 use crate::vfat::{BiosParameterBlock, CachedPartition, Metadata, Partition};
 use crate::vfat::{Cluster, Dir, Entry, Error, FatEntry, File, Status};
 
+
+
 /// A generic trait that handles a critical section as a closure
 pub trait VFatHandle: Clone + Debug + Send + Sync {
     fn new(val: VFat<Self>) -> Self;
@@ -120,14 +122,23 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
             match self.fat_entry(curr_cluster)?.status() {
                 Status::Data(cluster) => {
                     curr_cluster = cluster;
-                }
+                },
                 Status::Eoc(_) => {
                     break;
                 }
-                _ => {
+                Status::Free => {
+                    break; // why is this needed for kernel to run -_-
+                },
+                Status::Reserved => {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidData,
-                        "Reading: found cluster with status",
+                        "Reading: found cluster with res status",
+                    ));
+                },
+                Status::Bad => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "Reading: found cluster with bad status",
                     ));
                 }
             }
@@ -136,29 +147,39 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
     }
     pub fn write_chain(&mut self, start: Cluster, buf: &Vec<u8>) -> io::Result<usize> {
         let mut curr_cluster = start;
-        let mut bytes_read = 0;
+        let mut bytes_write = 0;
 
         loop {
+            bytes_write += self.write_cluster(curr_cluster, 0, buf)?;
+
             match self.fat_entry(curr_cluster)?.status() {
                 Status::Data(cluster) => {
-                    bytes_read += self.write_cluster(cluster, 0, buf)?;
-                    let next_entry = self.fat_entry(cluster)?.0;
-                    curr_cluster = Cluster::from(next_entry);
-                }
-                Status::Eoc(id) => {
-                    let cluster = Cluster::from(id);
-                    bytes_read += self.write_cluster(cluster, 0, buf)?;
+                    curr_cluster = cluster;
+                },
+                Status::Eoc(_) => {
                     break;
                 }
-                _ => {
+                Status::Free => {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidData,
-                        "Writing: found cluster with status: {:#?}",
+                        "Writing: found cluster with free status",
+                    ));
+                },
+                Status::Reserved => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "Writing: found cluster with res status",
+                    ));
+                },
+                Status::Bad => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "Writing: found cluster with bad status",
                     ));
                 }
             }
         }
-        Ok(bytes_read)
+        Ok(bytes_write)
     }
     //
     //  * A method to return a reference to a `FatEntry` for a cluster where the
@@ -176,7 +197,7 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
         Ok(fat_entry)
     }
 
-    fn get_root_dir(&mut self, handle: &HANDLE) -> io::Result<Dir<HANDLE>> {
+    pub fn get_root_dir(&mut self, handle: &HANDLE) -> io::Result<Dir<HANDLE>> {
         Ok(Dir {
             first_cluster: self.rootdir_cluster,
             vfat: handle.clone(),

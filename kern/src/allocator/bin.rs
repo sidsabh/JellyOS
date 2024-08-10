@@ -1,4 +1,5 @@
 use core::alloc::Layout;
+use core::borrow::Borrow;
 use core::fmt;
 use core::ptr;
 
@@ -66,7 +67,7 @@ impl LocalAlloc for Allocator {
         let idx: usize = max(0 as i32, ((size.ilog2() + 1) as i32) - 3) as usize;
         match self.bins[idx].iter_mut().find(|x| (x.value() as usize) % layout.align() == 0) {
             Some(node) => {
-                let value = node.value();
+                let value = node.pop();
                 kprintln!("grab alloc {:?}", value);
                 value as *mut u8
             },
@@ -78,7 +79,8 @@ impl LocalAlloc for Allocator {
                         kprintln!("make alloc {:?}", potential_addr as *mut usize);
                         potential_addr as *mut u8
                     }
-                    _ => core::ptr::null_mut(),
+                    _ => panic!("Out of memory")
+                    // _ => core::ptr::null_mut(),
                 }
             }
         }
