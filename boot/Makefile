@@ -3,6 +3,7 @@ ROOT := $(shell git rev-parse --show-toplevel)
 KERN := boot
 TARGET := target/aarch64-unknown-none/release/${KERN}
 OBJCPY := cargo objcopy --bin $(KERN) --release -- -O binary --strip-all
+SDCARD ?= $(ROOT)/ext/fat32-imgs/mock1.fat32.img
 
 .PHONY: all build qemu objdump nm check clean install test
 
@@ -21,7 +22,7 @@ check:
 	@cargo check
 
 qemu: build
-	./qemu.sh build/$(KERN).bin
+	./qemu.sh build/$(KERN).elf -drive file=$(SDCARD),format=raw,if=sd $(QEMU_ARGS)
 
 objdump: build
 	cargo objdump -- -disassemble -no-show-raw-insn -print-imm-hex build/$(KERN).elf
