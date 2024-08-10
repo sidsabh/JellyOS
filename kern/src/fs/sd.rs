@@ -37,7 +37,6 @@ use crate::console::kprintln;
 // The `wait_micros` C signature is: `void wait_micros(unsigned int);`
 #[no_mangle]
 fn wait_micros(us : u32) {
-    kprintln!("called");
     spin_sleep(Duration::from_micros(us.into()));
 }
 
@@ -87,7 +86,6 @@ impl BlockDevice for Sd {
     ///
     /// An error of kind `Other` is returned for all other errors.
     fn read_sector(&mut self, n: u64, buf: &mut [u8]) -> io::Result<usize> {
-        kprintln!("reading sd sector: {}", n);
         let bytes_read = unsafe { sd_readsector(n.try_into().unwrap(), buf as *mut [u8] as *mut u8) };
         Ok(bytes_read.try_into().unwrap())
     }

@@ -35,35 +35,13 @@ pub static ALLOCATOR: Allocator = Allocator::uninitialized();
 pub static FILESYSTEM: FileSystem = FileSystem::uninitialized();
 use crate::console::kprintln;
 
-use pi::atags::Atags;
 fn kmain() -> ! {
-    spin_sleep(Duration::from_millis(500)); // necessary delay after transmit before tty
-
-    // let atags = Atags::get();
-    // for a in atags {
-    //     kprintln!("{:#?}", a);
-    // }
+    spin_sleep(Duration::from_millis(500)); // necessary delay after transmit before tty\
 
     unsafe {
         ALLOCATOR.initialize();
         FILESYSTEM.initialize();
     }
-
-
-    use alloc::vec::Vec;
-    let mut entries = FILESYSTEM
-        .open_dir("/")
-        .expect("directory")
-        .entries()
-        .expect("entries interator")
-        .collect::<Vec<_>>();
-    kprintln!("{}", entries.len());
-    entries.sort_by(|a, b| a.name().cmp(b.name()));
-    for (i, entry) in entries.iter().enumerate() {
-        kprintln!("{} {} {}", i, entry.name(), entry.metadata());
-    }
-
-
 
     shell(">");
 }

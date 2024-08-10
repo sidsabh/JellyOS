@@ -1,5 +1,5 @@
-use shim::io::Write;
 use shim::io;
+use shim::io::Write;
 use shim::path::{Path, PathBuf};
 
 use stack_vec::StackVec;
@@ -51,13 +51,13 @@ struct Command<'a> {
 //                  | | :  `- \`. ;`. _/; .'/ /  .' ; |
 //                  \  \ `-.   \_\_`. _.'_/_/  -' _.' /
 // ==================`-.`___`-.__\ \___  /__.-'_.'_.-'================
-//  ____  _     _     _ _                _   _            ___  ____  _ 
+//  ____  _     _     _ _                _   _            ___  ____  _
 // / ___|(_) __| | __| | |__   __ _ _ __| |_| |__   __ _ / _ \/ ___|| |
 // \___ \| |/ _` |/ _` | '_ \ / _` | '__| __| '_ \ / _` | | | \___ \| |
 //  ___) | | (_| | (_| | | | | (_| | |  | |_| | | | (_| | |_| |___) |_|
 // |____/|_|\__,_|\__,_|_| |_|\__,_|_|   \__|_| |_|\__,_|\___/|____/(_)"#;
 
-const WELCOME_TXT : &str = r#"
+const WELCOME_TXT: &str = r#"
                             __
                            /  `~-,
                           /     /
@@ -128,13 +128,23 @@ impl<'a> Command<'a> {
 /// Starts a shell using `prefix` as the prefix for each line. This function
 /// returns if the `exit` command is called.
 use core::str::from_utf8;
+use crate::alloc::string::ToString;
+use alloc::vec::Vec;
+
 const MAX_LINE_LENGTH: usize = 512;
 pub fn shell(prefix: &str) -> ! {
+    let mut pwd = "/".to_string();
+
     kprintln!("{}", WELCOME_TXT);
+
+    let mut pwd_dir = FILESYSTEM
+    .open_dir(&pwd)
+    .expect("directory");
+
 
     let mut console = CONSOLE.lock();
     loop {
-        kprint!("{} ", prefix);
+        kprint!("({}){} ", pwd, prefix);
         let mut storage = [0; MAX_LINE_LENGTH]; // maxiumum command size
         let mut line: StackVec<u8> = StackVec::new(&mut storage);
         let mut idx = 0;
@@ -152,7 +162,8 @@ pub fn shell(prefix: &str) -> ! {
                         line.pop();
                     }
                 }
-                byte if (byte as char).is_ascii() && idx < MAX_LINE_LENGTH => match line.push(byte) {
+                byte if (byte as char).is_ascii() && idx < MAX_LINE_LENGTH => match line.push(byte)
+                {
                     Ok(()) => {
                         kprint!("{}", byte as char);
                         idx += 1;
@@ -169,28 +180,56 @@ pub fn shell(prefix: &str) -> ! {
             }
         }
         kprintln!("");
-        match from_utf8(line.into_slice()){ 
+        match from_utf8(line.into_slice()) {
             Ok(command_string) if command_string.len() != 0 => {
                 let mut buf = [""; 64];
                 match Command::parse(command_string, &mut buf) {
                     Ok(command) if command.path() == "echo" => {
                         command.args.iter().skip(1).for_each(|s| kprint!("{} ", *s));
                         kprintln!("");
-                    },
-                    Ok(command) if command.path() == "welcome"=> {
+                    }
+                    Ok(command) if command.path() == "welcome" => {
                         kprintln!("{}", WELCOME_TXT);
-                    },
+                    }
+                    Ok(command) if command.path() == "ls" => {
+                        let mut entries = pwd_dir.entries()
+                        .expect("entries interator")
+                        .collect::<Vec<_>>();
+    
+                        // entries.sort_by(|a, b| a.name().cmp(b.name()));
+                        for entry in &entries {
+                            kprintln!("{}", entry);
+                        }
+                    }
+                    Ok(command) if command.path() == "pwd" => {
+                        kprintln!("{}", pwd);
+                    }
+                    Ok(command) if command.path() == "cd" => {
+                        kprintln!("{}", command.args[1]);
+                        if let Ok(fat32::vfat::Entry::DirEntry(entry)) = pwd_dir.find(command.args[1]) {
+                            pwd += &entry.name;
+                            pwd_dir = entry;
+                        }
+
+                    }
+                    Ok(command) if command.path() == "cat" => {
+                        kprintln!("{}", command.args[1]);
+                        if let Ok(fat32::vfat::Entry::FileEntry(entry)) = pwd_dir.find(command.args[1]) {
+                            kprintln!("{}", entry);
+                        }
+
+                    }
                     Ok(command) => {
                         kprintln!("unknown command: {}", command.path());
-                    },
-                    Err(Error::TooManyArgs)  => {
+                    }
+                    Err(Error::TooManyArgs) => {
                         kprintln!("error: too many arguments");
-                    },
+                    }
                     _ => {
                         kprintln!("error: failed to parse");
                     }
                 }
-            }, 
+            }
             _ => {}
         }
     }

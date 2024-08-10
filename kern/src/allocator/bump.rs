@@ -52,7 +52,6 @@ impl LocalAlloc for Allocator {
         match potential_addr.checked_add(layout.size()) {
             Some(new_current) if new_current <= self.end => {
                 self.current = new_current;
-                kprintln!("make alloc {:?}", potential_addr as *mut usize);
                 potential_addr as *mut u8
             },
             _ => panic!("Out of memory!")

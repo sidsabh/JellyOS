@@ -68,7 +68,6 @@ impl LocalAlloc for Allocator {
         match self.bins[idx].iter_mut().find(|x| (x.value() as usize) % layout.align() == 0) {
             Some(node) => {
                 let value = node.pop();
-                kprintln!("grab alloc {:?}", value);
                 value as *mut u8
             },
             None => {
@@ -76,7 +75,6 @@ impl LocalAlloc for Allocator {
                 match potential_addr.checked_add(layout.size()) {
                     Some(new_current) if new_current <= self.end => {
                         self.current = new_current;
-                        kprintln!("make alloc {:?}", potential_addr as *mut usize);
                         potential_addr as *mut u8
                     }
                     _ => panic!("Out of memory")
@@ -101,7 +99,6 @@ impl LocalAlloc for Allocator {
     unsafe fn dealloc(&mut self, ptr: *mut u8, layout: Layout) {
         let size = align_up(layout.size(), layout.align());
         let idx: usize = max(0 as i32, ((size.ilog2() + 1) as i32) - 3) as usize;
-        kprintln!("dealloc {:?}", ptr);
         self.bins[idx].push(ptr as *mut usize);
     }
 }

@@ -93,7 +93,7 @@ pub fn memory_map() -> Option<(usize, usize)> {
     //     }
     //     None => None,
     // }
-    Some((610304, 1006022656))
+    Some((610304, 1006022656)) // atags not appearing for ELF kernel fix
 
 }
 

@@ -1,7 +1,9 @@
+use core::fmt::write;
+
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use shim::io::{self, SeekFrom};
+use shim::io::{self, Read, SeekFrom};
 
 use crate::traits;
 use crate::vfat::{Cluster, Metadata, VFatHandle};
@@ -94,5 +96,19 @@ impl<HANDLE: VFatHandle> traits::File for File<HANDLE> {
 
     fn size(&self) -> u64 {
         self.file_size
+    }
+}
+
+
+use alloc::fmt;
+impl<HANDLE: VFatHandle> fmt::Display for File<HANDLE> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        // let mut buffer = Vec::new();
+        // self.read_to_end(&mut buffer);
+        // write!(f, "{}", buffer)?;
+        match core::str::from_utf8(&self.data) {
+            Ok(s) => write!(f, "{}", s),
+            Err(_) => write!(f, "<invalid UTF-8 data>"),
+        }
     }
 }
