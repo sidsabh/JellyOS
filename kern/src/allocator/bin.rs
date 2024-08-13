@@ -17,11 +17,12 @@ use crate::console::kprint;
 ///   map_to_bin(size) -> k
 ///   
 
+
+
 pub struct Allocator {
-    // FIXME: Add the necessary fields.
     current: usize,
     end: usize,
-    bins: [LinkedList; 30],
+    bins: [LinkedList; 64 - 5],
 }
 
 impl Allocator {
@@ -31,7 +32,7 @@ impl Allocator {
         Allocator {
             current: start,
             end,
-            bins: [LinkedList::new(); 30],
+            bins: [LinkedList::new(); 64 - 5],
         }
     }
 }
@@ -39,7 +40,7 @@ use core::cmp::max;
 use crate::kprintln;
 
 
-// used the 30 bins of increasing 2 powers 
+// used the 64 bins of increasing 2 powers 
 impl LocalAlloc for Allocator {
     /// Allocates memory. Returns a pointer meeting the size and alignment
     /// properties of `layout.size()` and `layout.align()`.
@@ -63,22 +64,19 @@ impl LocalAlloc for Allocator {
     /// or `layout` does not meet this allocator's
     /// size or alignment constraints.
     unsafe fn alloc(&mut self, layout: Layout) -> *mut u8 {
-        let size = align_up(layout.size(), layout.align());
-        let idx: usize = max(0 as i32, ((size.ilog2() + 1) as i32) - 3) as usize;
-        match self.bins[idx].iter_mut().find(|x| (x.value() as usize) % layout.align() == 0) {
+        let idx: usize = max(0, layout.size().ilog2() as i32 - 5) as usize; // ilog2(sizeof(usize)) == 5
+        match self.bins[idx].iter_mut().find(|x| ((x.value() as usize) % layout.align()) == 0) {
             Some(node) => {
-                let value = node.pop();
-                value as *mut u8
+                node.pop() as *mut u8
             },
             None => {
                 let potential_addr = align_up(self.current, layout.align());
-                match potential_addr.checked_add(layout.size()) {
+                match potential_addr.checked_add(1 << (idx+6)) {
                     Some(new_current) if new_current <= self.end => {
                         self.current = new_current;
                         potential_addr as *mut u8
                     }
-                    _ => panic!("Out of memory")
-                    // _ => core::ptr::null_mut(),
+                    _ => core::ptr::null_mut(),
                 }
             }
         }
@@ -97,10 +95,12 @@ impl LocalAlloc for Allocator {
     /// Parameters not meeting these conditions may result in undefined
     /// behavior.
     unsafe fn dealloc(&mut self, ptr: *mut u8, layout: Layout) {
-        let size = align_up(layout.size(), layout.align());
-        let idx: usize = max(0 as i32, ((size.ilog2() + 1) as i32) - 3) as usize;
+        let idx: usize = max(0, layout.size().ilog2() as i32 - 5) as usize; // ilog2(sizeof(usize)) == 5
+        // FML
+        // `LinkedList` guarantees that the passed in pointer refers to valid, unique,
+        // writeable memory at least `usize` in size.
         self.bins[idx].push(ptr as *mut usize);
-    }
+    } 
 }
 
 // FIXME: Implement `Debug` for `Allocator`.

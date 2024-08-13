@@ -77,7 +77,7 @@ mod allocator {
 
     use core::alloc::Layout;
 
-    use crate::allocator::{bin, bump, LocalAlloc};
+    use crate::{allocator::{bin, bump, LocalAlloc}, console::kprint};
 
     macro_rules! test_allocators {
         (@$kind:ident, $name:ident, $mem:expr, |$info:pat_param| $block:expr) => {
@@ -242,6 +242,7 @@ mod allocator {
         for (i, layout) in layouts.iter().enumerate() {
             let mut ptrs = vec![];
             for _ in 0..(25 + i * 2) {
+                // kprint!("{:#?}", layout);
                 let ptr = a.alloc(layout.clone());
                 assert!(!ptr.is_null());
                 assert!(ptr as usize % layout.align() == 0,

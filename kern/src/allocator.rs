@@ -4,7 +4,7 @@ mod util;
 mod bin;
 mod bump;
 
-type AllocatorImpl = bump::Allocator;
+type AllocatorImpl = bin::Allocator;
 
 #[cfg(test)]
 mod tests;
@@ -81,19 +81,19 @@ use crate::allocator::util::align_up;
 /// This function is expected to return `Some` under all normal cirumstances.
 pub fn memory_map() -> Option<(usize, usize)> {
     
-    // let page_size: usize = 1 << 12;
-    // let mut binary_end = unsafe { (&__text_end as *const u8) as usize };
-    // binary_end = align_up(binary_end, page_size);
-    // let mut atags = Atags::get();
-    // match atags.find(|tag| tag.mem().is_some()) {
-    //     Some(atag) => {
-    //         let mem = atag.mem().unwrap();
-    //         // kprintln!("{} {}", binary_end, (mem.size as usize)-binary_end);
-    //         Some((binary_end, (mem.size as usize) - binary_end))
-    //     }
-    //     None => None,
-    // }
-    Some((610304, 1006022656)) // atags not appearing for ELF kernel fix
+    let page_size: usize = 1 << 12;
+    let mut binary_end = unsafe { (&__text_end as *const u8) as usize };
+    binary_end = align_up(binary_end, page_size);
+    let mut atags = Atags::get();
+    match atags.find(|tag| tag.mem().is_some()) {
+        Some(atag) => {
+            let mem = atag.mem().unwrap();
+            // kprintln!("{} {}", binary_end, (mem.size as usize)-binary_end);
+            Some((binary_end, (mem.size as usize) - binary_end))
+        }
+        None => Some((1000000, 1006022656)) // atags not appearing for ELF kernel fix,
+        // None => None // correct code
+    }
 
 }
 

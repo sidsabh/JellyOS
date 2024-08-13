@@ -54,8 +54,7 @@ impl LocalAlloc for Allocator {
                 self.current = new_current;
                 potential_addr as *mut u8
             },
-            _ => panic!("Out of memory!")
-            // _ => core::ptr::null_mut()
+            _ => core::ptr::null_mut()
         }
     }
 
