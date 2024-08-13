@@ -13,6 +13,7 @@ use crate::console::{kprint, kprintln, CONSOLE};
 use crate::ALLOCATOR;
 use crate::FILESYSTEM;
 
+use core::borrow::Borrow;
 use core::prelude::rust_2024::derive;
 
 use core::fmt::Debug;
@@ -125,22 +126,22 @@ impl<'a> Command<'a> {
     }
 }
 
+use crate::alloc::borrow::ToOwned;
+use crate::alloc::string::ToString;
+use alloc::vec::Vec;
 /// Starts a shell using `prefix` as the prefix for each line. This function
 /// returns if the `exit` command is called.
 use core::str::from_utf8;
-use crate::alloc::string::ToString;
-use alloc::vec::Vec;
+
+const ROOT_NAME: &str = "/";
 
 const MAX_LINE_LENGTH: usize = 512;
 pub fn shell(prefix: &str) -> ! {
-    let mut pwd = "/".to_string();
+    let mut pwd = ROOT_NAME.to_string();
 
     kprintln!("{}", WELCOME_TXT);
 
-    let mut pwd_dir = FILESYSTEM
-    .open_dir(&pwd)
-    .expect("directory");
-
+    let mut pwd_dir = FILESYSTEM.open_dir(&pwd).expect("directory");
 
     let mut console = CONSOLE.lock();
     loop {
@@ -180,6 +181,7 @@ pub fn shell(prefix: &str) -> ! {
             }
         }
         kprintln!("");
+
         match from_utf8(line.into_slice()) {
             Ok(command_string) if command_string.len() != 0 => {
                 let mut buf = [""; 64];
@@ -192,32 +194,49 @@ pub fn shell(prefix: &str) -> ! {
                         kprintln!("{}", WELCOME_TXT);
                     }
                     Ok(command) if command.path() == "ls" => {
-                        let mut entries = pwd_dir.entries()
-                        .expect("entries interator")
-                        .collect::<Vec<_>>();
-    
-                        // entries.sort_by(|a, b| a.name().cmp(b.name()));
-                        for entry in &entries {
-                            kprintln!("{}", entry);
-                        }
+                        pwd_dir
+                            .entries()
+                            .expect("entries interator")
+                            .collect::<Vec<_>>()
+                            .iter()
+                            .for_each(|entry| {
+                                kprintln!("{}", entry);
+                            });
                     }
                     Ok(command) if command.path() == "pwd" => {
                         kprintln!("{}", pwd);
                     }
                     Ok(command) if command.path() == "cd" => {
-                        kprintln!("{}", command.args[1]);
-                        if let Ok(fat32::vfat::Entry::DirEntry(entry)) = pwd_dir.find(command.args[1]) {
-                            pwd += &entry.name;
-                            pwd_dir = entry;
+                        let target = command.args[1];
+                        if let Ok(fat32::vfat::Entry::DirEntry(dir)) = pwd_dir.find(&target) {
+                            if dir.first_cluster == 0.into() {
+                                pwd = ROOT_NAME.to_string();
+                                pwd_dir = FILESYSTEM.open_dir(&pwd).expect("directory");
+                            } else if target == ".." && let Some(idx) = pwd.rfind('/') {
+                                pwd = pwd[..idx].to_string();
+                                pwd_dir = dir;
+                            } else if target == "." {
+                                continue;
+                            } else {
+                                if pwd != ROOT_NAME {
+                                    pwd += &"/".to_owned(); // add backslash between directories
+                                }
+                                pwd += &dir.name;
+                                pwd_dir = dir;
+                            }
+                        } else {
+                            kprintln!("error: dir not found");
                         }
-
                     }
                     Ok(command) if command.path() == "cat" => {
                         kprintln!("{}", command.args[1]);
-                        if let Ok(fat32::vfat::Entry::FileEntry(entry)) = pwd_dir.find(command.args[1]) {
+                        if let Ok(fat32::vfat::Entry::FileEntry(entry)) =
+                            pwd_dir.find(command.args[1])
+                        {
                             kprintln!("{}", entry);
+                        } else {
+                            kprintln!("error: dir not found");
                         }
-
                     }
                     Ok(command) => {
                         kprintln!("unknown command: {}", command.path());

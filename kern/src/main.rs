@@ -10,6 +10,7 @@
 #![feature(exclusive_range_pattern)]
 #![feature(const_mut_refs)]
 #![feature(const_option)]
+#![feature(let_chains)]
 
 #[cfg(not(test))]
 mod init;
