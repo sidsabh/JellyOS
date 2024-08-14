@@ -120,12 +120,13 @@ impl<HANDLE: VFatHandle> Dir<HANDLE> {
 
     pub fn open_path<P: AsRef<path::Path>>(&self, path: P, pwd: &mut PathBuf) -> io::Result<Entry<HANDLE>> {
         let mut curr = Entry::DirEntry(self.clone());
+        let mut working_pwd = pwd.clone();
         for component in path.as_ref().components() {
             match component {
                 // path::Component::Prefix(_) => todo!(),
                 path::Component::RootDir => {
                     curr = Entry::DirEntry(self.vfat.lock(|s| s.get_root_dir(&self.vfat.clone()))?);
-                    *pwd = path::Path::new("/").to_path_buf();
+                    working_pwd = path::Path::new("/").to_path_buf();
                 },
                 path::Component::CurDir => {
                     continue;
@@ -134,7 +135,7 @@ impl<HANDLE: VFatHandle> Dir<HANDLE> {
                     if let Some(dir) = curr.as_dir() {
                         curr = dir.find("..")?;
                         
-                        pwd.pop();
+                        working_pwd.pop();
                     } else {
                         return Err(io::Error::new(
                             io::ErrorKind::NotFound,
@@ -145,7 +146,7 @@ impl<HANDLE: VFatHandle> Dir<HANDLE> {
                 path::Component::Normal(name) => {
                     if let Some(dir) = curr.as_dir() {
                         curr = dir.find(name)?;
-                        *pwd = pwd.join(name);
+                        working_pwd = working_pwd.join(name);
                     } else {
                         return Err(io::Error::new(
                             io::ErrorKind::NotFound,
@@ -161,6 +162,7 @@ impl<HANDLE: VFatHandle> Dir<HANDLE> {
                 }
             }
         }
+        *pwd = working_pwd;
         Ok(curr)
     }
 }

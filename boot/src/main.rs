@@ -1,6 +1,3 @@
-#![feature(asm)]
-#![feature(global_asm)]
-
 #![cfg_attr(not(test), no_std)]
 #![cfg_attr(not(test), no_main)]
 
@@ -10,7 +7,6 @@
 mod init;
 
 use pi::uart::MiniUart;
-use shim::io::Write;
 use xmodem::Xmodem;
 use core::time::Duration;
 use pi;
