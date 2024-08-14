@@ -1,8 +1,9 @@
-use crate::common::IO_BASE;
 use core::time::Duration;
 
-use volatile::prelude::*;
 use volatile::{ReadVolatile, Volatile};
+use volatile::prelude::*;
+
+use crate::common::IO_BASE;
 
 /// The base address for the ARM system timer registers.
 const TIMER_REG_BASE: usize = IO_BASE + 0x3000;
@@ -32,28 +33,37 @@ impl Timer {
     /// Reads the system timer's counter and returns Duration.
     /// `CLO` and `CHI` together can represent the number of elapsed microseconds.
     pub fn read(&self) -> Duration {
-        let mut curr_h: u64;
-        let mut curr_l: u64;
-        
-        loop { // for race conditions
-            curr_h = self.registers.CHI.read().into();
-            curr_l = self.registers.CLO.read().into();
-            if curr_h == self.registers.CHI.read().into() { break; }
-        }
-        let counter: u64 = { curr_h << 32 | curr_l };
+        let mut micros: u64 = self.registers.CLO.read() as u64;
+        micros |= (self.registers.CHI.read() as u64) << 32;
+        Duration::from_micros(micros)
+    }
 
-        Duration::from_micros(counter)
+    /// Sets up a match in timer 1 to occur `t` duration from now. If
+    /// interrupts for timer 1 are enabled and IRQs are unmasked, then a timer
+    /// interrupt will be issued in `t` duration.
+    pub fn tick_in(&mut self, t: Duration) {
+        let time = self.registers.CLO.read();
+        let tick_at = time.wrapping_add(t.as_micros() as u32);
+
+        self.registers.COMPARE[1].write(tick_at);
+        self.registers.CS.write(0b10);
     }
 }
 
 /// Returns current time.
 pub fn current_time() -> Duration {
-    let timer = Timer::new();
-    timer.read()
+    Timer::new().read()
 }
 
 /// Spins until `t` duration have passed.
 pub fn spin_sleep(t: Duration) {
-    let start_time = current_time();
-    while current_time() < start_time+t {};
+    let start = current_time();
+    while start + t > current_time() {}
+}
+
+/// Sets up a match in timer 1 to occur `t` duration from now. If
+/// interrupts for timer 1 are enabled and IRQs are unmasked, then a timer
+/// interrupt will be issued in `t` duration.
+pub fn tick_in(t: Duration) {
+    Timer::new().tick_in(t);
 }

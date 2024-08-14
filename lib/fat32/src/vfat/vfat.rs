@@ -13,7 +13,7 @@ use crate::mbr::MasterBootRecord;
 use crate::traits::Entry as EntryTrait;
 use crate::traits::{BlockDevice, FileSystem};
 use crate::util::SliceExt;
-use crate::vfat::{BiosParameterBlock, CachedPartition, Metadata, Partition};
+use crate::vfat::{BiosParameterBlock, CachedPartition, Partition};
 use crate::vfat::{Cluster, Dir, Entry, Error, FatEntry, File, Status};
 
 
@@ -30,7 +30,7 @@ pub struct VFat<HANDLE: VFatHandle> {
     device: CachedPartition,
     bytes_per_sector: u16,
     sectors_per_cluster: u8,
-    sectors_per_fat: u32,
+    _sectors_per_fat: u32,
     fat_start_sector: u64,
     data_start_sector: u64,
     rootdir_cluster: Cluster,
@@ -59,7 +59,7 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
             device: cp,
             bytes_per_sector: bpb.bytes_per_sector,
             sectors_per_cluster: bpb.sectors_per_cluster,
-            sectors_per_fat: bpb.sectors_per_fat,
+            _sectors_per_fat: bpb.sectors_per_fat,
             fat_start_sector: bpb.num_reserved_sectors as u64,
             data_start_sector: dss,
             rootdir_cluster: Cluster::from(bpb.root_dir_cluster),
@@ -223,6 +223,7 @@ impl<'a, HANDLE: VFatHandle> FileSystem for &'a HANDLE {
                 path::Component::Normal(name) => {
                     if let Some(dir) = curr.as_dir() {
                         curr = dir.find(name)?;
+                        break;
                     } else {
                         return Err(io::Error::new(
                             io::ErrorKind::NotFound,

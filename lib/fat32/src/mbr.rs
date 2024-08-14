@@ -1,9 +1,7 @@
-use core::fmt;
 use shim::const_assert_size;
 use shim::io;
 
 use crate::traits::BlockDevice;
-use crate::vfat::Partition;
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]

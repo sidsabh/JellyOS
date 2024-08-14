@@ -4,7 +4,7 @@ mod util;
 mod bin;
 mod bump;
 
-type AllocatorImpl = bump::Allocator;
+type AllocatorImpl = bin::Allocator;
 
 #[cfg(test)]
 mod tests;
@@ -12,7 +12,6 @@ mod tests;
 use core::alloc::{GlobalAlloc, Layout};
 use core::fmt;
 
-use crate::console::kprintln;
 use crate::mutex::Mutex;
 use pi::atags::Atags;
 
@@ -50,6 +49,7 @@ impl Allocator {
 
 unsafe impl GlobalAlloc for Allocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        // kprintln!("allocing: {}  bytes", layout.size());
         let aligned_layout = Layout::from_size_align(layout.size(), layout.align().max(4))
             .expect("Invalid layout for allocation");
         self.0
@@ -60,6 +60,7 @@ unsafe impl GlobalAlloc for Allocator {
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        // kprintln!("deallocing: {}  bytes", layout.size());
         let aligned_layout = Layout::from_size_align(layout.size(), layout.align().max(4))
             .expect("Invalid layout for deallocation");
         self.0
@@ -88,10 +89,9 @@ pub fn memory_map() -> Option<(usize, usize)> {
     match atags.find(|tag| tag.mem().is_some()) {
         Some(atag) => {
             let mem = atag.mem().unwrap();
-            // kprintln!("{} {}", binary_end, (mem.size as usize)-binary_end);
             Some((binary_end, (mem.size as usize) - binary_end))
         }
-        None => Some((1000000, 1006022656)) // atags not appearing for ELF kernel fix,
+        None => Some((1000000, 1006022656)) // atags not appearing for ELF kernel QEMU fix,
         // None => None // correct code
     }
 
@@ -100,8 +100,9 @@ pub fn memory_map() -> Option<(usize, usize)> {
 impl fmt::Debug for Allocator {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.0.lock().as_mut() {
-            // Some(ref alloc) => write!(f, "{:?}", alloc)?,
-            Some(ref alloc) => {}
+            Some(ref alloc) => {
+                write!(f, "{:?}", alloc)?;
+            }
             None => write!(f, "Not yet initialized")?,
         }
         Ok(())

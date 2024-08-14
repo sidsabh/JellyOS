@@ -1,8 +1,6 @@
 use core::fmt;
 use core::ops::BitAnd;
 
-use alloc::string::String;
-
 use crate::traits::{self, Timestamp as TimestampTrait, Metadata as MetadataTrait};
 
 
@@ -39,7 +37,6 @@ pub struct Metadata {
     pub modified_date: Date,
 }
 
-// FIXME: Implement `traits::Timestamp` for `Timestamp`.
 impl traits::Timestamp for Timestamp {
     fn year(&self) -> usize {
         // Bits 15-9 represent the year offset from 1980
@@ -89,7 +86,6 @@ impl fmt::Display for Timestamp {
     }
 }
 
-// FIXME: Implement `traits::Metadata` for `Metadata`.
 impl traits::Metadata for Metadata {
     type Timestamp = Timestamp;
 
@@ -123,7 +119,6 @@ impl traits::Metadata for Metadata {
     }
 }
 
-// FIXME: Implement `fmt::Display` (to your liking) for `Metadata`.
 impl fmt::Display for Metadata {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(

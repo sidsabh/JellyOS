@@ -1,10 +1,7 @@
 use core::alloc::Layout;
-use core::panic;
-use core::ptr;
 
 use crate::allocator::util::*;
 use crate::allocator::LocalAlloc;
-use crate::kprintln;
 
 /// A "bump" allocator: allocates memory by bumping a pointer; never frees.
 #[derive(Debug)]

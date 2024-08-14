@@ -5,7 +5,6 @@ use shim::io;
 use crate::mutex::Mutex;
 use core::option::Option;
 use core::option::Option::None;
-use core::result::Result::Ok;
 
 /// A global singleton allowing read/write access to the console.
 pub struct Console {

@@ -8,15 +8,13 @@ use hashbrown::HashMap;
 use shim::const_assert_size;
 use shim::ffi::OsStr;
 use shim::io;
-use shim::newioerr;
 
 use crate::traits;
 use crate::traits::Dir as DirTrait;
 use crate::traits::Entry as EntryTrait;
-use crate::util::SliceExt;
 use crate::util::VecExt;
-use crate::vfat::{Attributes, Date, Metadata, Time, Timestamp};
-use crate::vfat::{CachedPartition, Cluster, Entry, Error, File, VFatHandle};
+use crate::vfat::{Attributes, Date, Metadata, Time};
+use crate::vfat::{Cluster, Entry, File, VFatHandle};
 
 #[derive(Debug)]
 pub struct Dir<HANDLE: VFatHandle> {

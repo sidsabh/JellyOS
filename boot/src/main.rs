@@ -41,7 +41,6 @@ unsafe fn jump_to(addr: *mut u8) -> ! {
 
 use core::slice::from_raw_parts_mut;
 fn kmain() -> ! {
-    // FIXME: Implement the bootloader.
     loop {
         let into: &mut [u8] = unsafe {from_raw_parts_mut(BINARY_START, MAX_BINARY_SIZE)};
         let mut from = MiniUart::new();

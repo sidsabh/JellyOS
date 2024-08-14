@@ -1,7 +1,6 @@
-#![feature(core_intrinsics)]
-// #![feature(const_fn)]
 #![feature(decl_macro)]
 #![feature(never_type)]
+#![allow(unused_doc_comments)]
 #![no_std]
 
 pub mod atags;

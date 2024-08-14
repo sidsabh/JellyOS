@@ -1,19 +1,14 @@
-use shim::io;
 use shim::io::Write;
 use shim::path::{Path, PathBuf};
 
 use stack_vec::StackVec;
 
-use pi::atags::Atags;
-
 use fat32::traits::FileSystem;
-use fat32::traits::{Dir, Entry};
+use fat32::traits::Dir;
 
 use crate::console::{kprint, kprintln, CONSOLE};
-use crate::ALLOCATOR;
 use crate::FILESYSTEM;
 
-use core::borrow::Borrow;
 use core::prelude::rust_2024::derive;
 
 use core::fmt::Debug;
@@ -126,18 +121,15 @@ impl<'a> Command<'a> {
     }
 }
 
-use crate::alloc::borrow::ToOwned;
-use crate::alloc::string::ToString;
 use alloc::vec::Vec;
 /// Starts a shell using `prefix` as the prefix for each line. This function
 /// returns if the `exit` command is called.
 use core::str::from_utf8;
-
 const ROOT_NAME: &str = "/";
 
 const MAX_LINE_LENGTH: usize = 512;
 pub fn shell(prefix: &str) -> ! {
-    let mut pwd = ROOT_NAME.to_string();
+    let mut pwd  = Path::new(ROOT_NAME).to_path_buf();
 
     kprintln!("{}", WELCOME_TXT);
 
@@ -145,7 +137,7 @@ pub fn shell(prefix: &str) -> ! {
 
     let mut console = CONSOLE.lock();
     loop {
-        kprint!("({}){} ", pwd, prefix);
+        kprint!("({}){} ", pwd.display(), prefix);
         let mut storage = [0; MAX_LINE_LENGTH]; // maxiumum command size
         let mut line: StackVec<u8> = StackVec::new(&mut storage);
         let mut idx = 0;
@@ -204,24 +196,26 @@ pub fn shell(prefix: &str) -> ! {
                             });
                     }
                     Ok(command) if command.path() == "pwd" => {
-                        kprintln!("{}", pwd);
+                        kprintln!("{}", pwd.display());
                     }
                     Ok(command) if command.path() == "cd" => {
-                        let target = command.args[1];
+                        let target = Path::new(command.args[1]);
+                        kprintln!("target: {}", target.display());
                         if let Ok(fat32::vfat::Entry::DirEntry(dir)) = pwd_dir.find(&target) {
+                            kprintln!("made it here");
                             if dir.first_cluster == 0.into() {
-                                pwd = ROOT_NAME.to_string();
+                                pwd = Path::new(ROOT_NAME).to_path_buf();
                                 pwd_dir = FILESYSTEM.open_dir(&pwd).expect("directory");
-                            } else if target == ".." && let Some(idx) = pwd.rfind('/') {
-                                pwd = pwd[..idx].to_string();
-                                pwd_dir = dir;
-                            } else if target == "." {
-                                continue;
-                            } else {
-                                if pwd != ROOT_NAME {
-                                    pwd += &"/".to_owned(); // add backslash between directories
-                                }
-                                pwd += &dir.name;
+                            } 
+                            // else if target == ".." && let Some(idx) = pwd.rfind('/') {
+                            //     pwd = pwd[..idx].to_string();
+                            //     pwd_dir = dir;
+                            // } else if target == "." {
+                            //     continue;
+                            // } 
+                            else {
+                                
+                                pwd = pwd.join(&dir.name);
                                 pwd_dir = dir;
                             }
                         } else {

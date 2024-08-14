@@ -1,12 +1,8 @@
 use core::alloc::Layout;
-use core::borrow::Borrow;
-use core::fmt;
-use core::ptr;
 
 use crate::allocator::linked_list::LinkedList;
 use crate::allocator::util::*;
 use crate::allocator::LocalAlloc;
-use crate::console::kprint;
 
 /// A simple allocator that allocates based on size classes.
 ///   bin 0 (2^3 bytes)    : handles allocations in (0, 2^3]
@@ -17,8 +13,7 @@ use crate::console::kprint;
 ///   map_to_bin(size) -> k
 ///   
 
-
-
+#[derive(Debug)]
 pub struct Allocator {
     current: usize,
     end: usize,
@@ -37,10 +32,8 @@ impl Allocator {
     }
 }
 use core::cmp::max;
-use crate::kprintln;
 
-
-// used the 64 bins of increasing 2 powers 
+// used the 64 bins of increasing 2 powers
 impl LocalAlloc for Allocator {
     /// Allocates memory. Returns a pointer meeting the size and alignment
     /// properties of `layout.size()` and `layout.align()`.
@@ -65,13 +58,14 @@ impl LocalAlloc for Allocator {
     /// size or alignment constraints.
     unsafe fn alloc(&mut self, layout: Layout) -> *mut u8 {
         let idx: usize = max(0, layout.size().ilog2() as i32 - 5) as usize; // ilog2(sizeof(usize)) == 5
-        match self.bins[idx].iter_mut().find(|x| ((x.value() as usize) % layout.align()) == 0) {
-            Some(node) => {
-                node.pop() as *mut u8
-            },
+        match self.bins[idx]
+            .iter_mut()
+            .find(|x| ((x.value() as usize) % layout.align()) == 0)
+        {
+            Some(node) => node.pop() as *mut u8,
             None => {
                 let potential_addr = align_up(self.current, layout.align());
-                match potential_addr.checked_add(1 << (idx+6)) {
+                match potential_addr.checked_add(1 << (idx + 6)) {
                     Some(new_current) if new_current <= self.end => {
                         self.current = new_current;
                         potential_addr as *mut u8
@@ -96,11 +90,9 @@ impl LocalAlloc for Allocator {
     /// behavior.
     unsafe fn dealloc(&mut self, ptr: *mut u8, layout: Layout) {
         let idx: usize = max(0, layout.size().ilog2() as i32 - 5) as usize; // ilog2(sizeof(usize)) == 5
-        // FML
-        // `LinkedList` guarantees that the passed in pointer refers to valid, unique,
-        // writeable memory at least `usize` in size.
+                                                                            // FML
+                                                                            // `LinkedList` guarantees that the passed in pointer refers to valid, unique,
+                                                                            // writeable memory at least `usize` in size.
         self.bins[idx].push(ptr as *mut usize);
-    } 
+    }
 }
-
-// FIXME: Implement `Debug` for `Allocator`.

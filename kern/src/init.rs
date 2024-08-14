@@ -9,6 +9,7 @@ use crate::kmain;
 
 global_asm!(include_str!("init/init.s"));
 
+#[allow(static_mut_refs)]
 unsafe fn zeros_bss() {
     extern "C" {
         static mut __bss_beg: u64;

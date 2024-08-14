@@ -1,4 +1,3 @@
-use core::fmt;
 use shim::const_assert_size;
 
 use crate::traits::BlockDevice;

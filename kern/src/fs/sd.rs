@@ -1,6 +1,5 @@
 use core::time::Duration;
-use shim::io;
-use shim::ioerr;
+use shim::{io, ioerr};
 
 use fat32::traits::BlockDevice;
 
@@ -30,14 +29,14 @@ extern "C" {
 }
 
 
-use pi::timer::spin_sleep;
+use pi::timer;
 
 use crate::console::kprintln;
-// FIXME: Define a `#[no_mangle]` `wait_micros` function for use by `libsd`.
-// The `wait_micros` C signature is: `void wait_micros(unsigned int);`
 #[no_mangle]
 fn wait_micros(us : u32) {
-    spin_sleep(Duration::from_micros(us.into()));
+    let j = timer::current_time().as_micros();
+    kprintln!("sleep {} called at {}", us, j);
+    timer::spin_sleep(Duration::from_micros(us as u64));
 }
 
 /// A handle to an SD card controller.
@@ -51,21 +50,20 @@ impl Sd {
     /// with atomic memory access, but we can't use it yet since we haven't
     /// written the memory management unit (MMU).
     pub unsafe fn new() -> Result<Sd, io::Error> {
-        match unsafe {sd_init()} {
+        match sd_init() {
             0 => {
-                // use alloc::vec;
-                // let mut buf = vec![0 as u8; 512];
-                // res.read_sector(0, buf.as_mut_slice())?;
-                // kprintln!("{:#?}", buf);
-                Ok(Sd)
+                return Ok(Sd);
             },
             -1 => {
+                kprintln!("sdcard err: {}", sd_err);
                 Err(io::Error::new(io::ErrorKind::TimedOut, "SD Card initialization timed out"))
             },
             -2 => {
+                kprintln!("sdcard err: {}", sd_err);
                 Err(io::Error::new(io::ErrorKind::ConnectionRefused, "SD Card did not recieve commands"))
             },
             _ => {
+                kprintln!("sdcard err: {}", sd_err);
                 Err(io::Error::new(io::ErrorKind::Uncategorized, "Unknown error"))
             }
         }

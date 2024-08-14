@@ -47,7 +47,6 @@ struct Registers {
 }
 
 /// Possible states for a GPIO pin.
-#[allow(unused_doc_comments)]
 states! {
     Uninitialized, Input, Output, Alt
 }

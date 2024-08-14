@@ -116,8 +116,8 @@ impl CachedPartition {
             None => {
                 let mut data = vec![0 as u8; self.partition.sector_size as usize];
                 for i in 0..self.factor() {
-                    let start: usize =( i * self.device.sector_size()) as usize;
-                    let end: usize = ((i+1) * self.device.sector_size()) as usize;
+                    let start: usize = (i * self.device.sector_size()) as usize;
+                    let end: usize = ((i + 1) * self.device.sector_size()) as usize;
                     self.device.read_sector(
                         self.virtual_to_physical(sector).expect("bad caller") + i,
                         &mut data[start..end],
@@ -131,10 +131,8 @@ impl CachedPartition {
     }
 }
 
-// FIXME: Implement `BlockDevice` for `CacheDevice`. The `read_sector` and
-// `write_sector` methods should only read/write from/to cached sectors.
+// The `read_sector` and write_sector` methods should only read/write from/to cached sectors.
 impl BlockDevice for CachedPartition {
-
     fn sector_size(&self) -> u64 {
         if self.partition.sector_size % 512 != 0 {
             panic!("Invalid CachedPartition sector size");
@@ -148,15 +146,13 @@ impl BlockDevice for CachedPartition {
         sector.copy_from_slice(&buf[..bytes_to_write]);
         Ok(bytes_to_write)
     }
-    
+
     fn read_sector(&mut self, sector: u64, buf: &mut [u8]) -> io::Result<usize> {
         let bytes_to_read = (self.partition.sector_size as usize).min(buf.len());
         let sector = self.get(sector)?;
         buf.copy_from_slice(&(sector[..bytes_to_read]));
         Ok(bytes_to_read)
     }
-
-
 }
 
 // why not derive debug?

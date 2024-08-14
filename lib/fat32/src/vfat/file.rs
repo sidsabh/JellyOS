@@ -1,9 +1,7 @@
-use core::fmt::write;
-
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use shim::io::{self, Read, SeekFrom};
+use shim::io::{self, SeekFrom};
 
 use crate::traits;
 use crate::vfat::{Cluster, Metadata, VFatHandle};
