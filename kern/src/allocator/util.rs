@@ -5,6 +5,7 @@
 /// # Panics
 ///
 /// Panics if `align` is not a power of 2.
+#[allow(dead_code)]
 pub fn align_down(addr: usize, align: usize) -> usize {
     if !align.is_power_of_two() {
         panic!("align is not a power of two");

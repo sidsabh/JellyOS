@@ -1,6 +1,5 @@
 use shim::io::Write;
-use shim::path::{Path, PathBuf};
-
+use shim::path::Path;
 use stack_vec::StackVec;
 
 use fat32::traits::FileSystem;
@@ -127,6 +126,8 @@ use alloc::vec::Vec;
 use core::str::from_utf8;
 const ROOT_NAME: &str = "/";
 
+
+use shim::ffi::OsStr;
 const MAX_LINE_LENGTH: usize = 512;
 pub fn shell(prefix: &str) -> ! {
     let mut pwd  = Path::new(ROOT_NAME).to_path_buf();
@@ -199,22 +200,18 @@ pub fn shell(prefix: &str) -> ! {
                         kprintln!("{}", pwd.display());
                     }
                     Ok(command) if command.path() == "cd" => {
-                        let target = Path::new(command.args[1]);
-                        kprintln!("target: {}", target.display());
-                        if let Ok(fat32::vfat::Entry::DirEntry(dir)) = pwd_dir.find(&target) {
-                            kprintln!("made it here");
+                        let target = OsStr::new(command.args[1]);
+                        if let Ok(fat32::vfat::Entry::DirEntry(dir)) = pwd_dir.find(target) {
                             if dir.first_cluster == 0.into() {
                                 pwd = Path::new(ROOT_NAME).to_path_buf();
-                                pwd_dir = FILESYSTEM.open_dir(&pwd).expect("directory");
+                                pwd_dir = FILESYSTEM.open_dir(&pwd).expect("root directory");
                             } 
-                            // else if target == ".." && let Some(idx) = pwd.rfind('/') {
-                            //     pwd = pwd[..idx].to_string();
-                            //     pwd_dir = dir;
-                            // } else if target == "." {
-                            //     continue;
-                            // } 
-                            else {
-                                
+                            else if target == ".." {
+                                pwd.pop();
+                                pwd_dir = dir;
+                            } else if target == "." {
+                                continue;
+                            }  else {
                                 pwd = pwd.join(&dir.name);
                                 pwd_dir = dir;
                             }

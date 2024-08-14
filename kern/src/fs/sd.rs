@@ -1,5 +1,5 @@
 use core::time::Duration;
-use shim::{io, ioerr};
+use shim::io;
 
 use fat32::traits::BlockDevice;
 
@@ -34,8 +34,6 @@ use pi::timer;
 use crate::console::kprintln;
 #[no_mangle]
 fn wait_micros(us : u32) {
-    let j = timer::current_time().as_micros();
-    kprintln!("sleep {} called at {}", us, j);
     timer::spin_sleep(Duration::from_micros(us as u64));
 }
 
