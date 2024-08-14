@@ -62,8 +62,8 @@ impl LocalAlloc for Allocator {
             .iter_mut()
             .find(|x| ((x.value() as usize) % layout.align()) == 0)
         {
-            Some(node) => node.pop() as *mut u8,
-            None => {
+            Some(node) if node.value() != core::ptr::null_mut() => node.pop() as *mut u8,
+            _ => {
                 let potential_addr = align_up(self.current, layout.align());
                 match potential_addr.checked_add(1 << (idx + 6)) {
                     Some(new_current) if new_current <= self.end => {
@@ -89,10 +89,10 @@ impl LocalAlloc for Allocator {
     /// Parameters not meeting these conditions may result in undefined
     /// behavior.
     unsafe fn dealloc(&mut self, ptr: *mut u8, layout: Layout) {
-        let idx: usize = max(0, layout.size().ilog2() as i32 - 5) as usize; // ilog2(sizeof(usize)) == 5
-                                                                            // FML
-                                                                            // `LinkedList` guarantees that the passed in pointer refers to valid, unique,
-                                                                            // writeable memory at least `usize` in size.
+        let idx: usize = layout.size().ilog2().saturating_sub(5) as usize;
+        //                                                                     // FML
+        //                                                                     // `LinkedList` guarantees that the passed in pointer refers to valid, unique,
+        //                                                                     // writeable memory at least `usize` in size.
         self.bins[idx].push(ptr as *mut usize);
     }
 }
