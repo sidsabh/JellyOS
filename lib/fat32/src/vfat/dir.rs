@@ -220,6 +220,7 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
             accessed_date: regular_entry.accessed_date,
             modified_time: regular_entry.modification_time,
             modified_date: regular_entry.modification_date,
+            size: regular_entry.file_size
         };
 
         // get first_cluster
@@ -242,7 +243,8 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
                 let br = self.vfat
                     .lock(|s| s.read_chain(first_cluster.into(), &mut data))
                     .ok()?;
-                assert!(br >= regular_entry.file_size as usize);
+                let j = regular_entry.file_size;
+                assert!(br >= j as usize, "br = {}, regular_entry.file_size = {}", br, j);
             }
             return Some(Entry::FileEntry(File {
                 first_cluster: first_cluster.into(),
@@ -251,7 +253,6 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
                 name,
                 data: data[..(regular_entry.file_size as usize)].to_vec(),
                 offset: 0,
-                file_size: regular_entry.file_size as u64,
             }));
         }
     }
@@ -264,7 +265,6 @@ impl<HANDLE: VFatHandle> traits::Dir for Dir<HANDLE> {
     /// you may find the VecExt and SliceExt trait implementations we have provided particularly useful here.
     fn entries(&self) -> io::Result<Self::Iter> {
         let mut data: Vec<u8> = Vec::new();
-        // Your file system is likely very memory intensive. To avoid running out of memory, ensure you’re using your bin allocator.
         // TODO: why are we reading an entire chain into memory? we should only do this on demand.
         self.vfat
             .lock(|s| s.read_chain(self.first_cluster, &mut data))?; //

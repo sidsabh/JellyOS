@@ -98,6 +98,9 @@ impl<HANDLE: VFatHandle> fmt::Display for Entry<HANDLE> {
         write_timestamp(f, self.metadata().accessed())?;
         write!(f, "\t")?;
 
+        write!(f, "{}", self.metadata().size)?;
+        write!(f, "\t")?;
+
         write!(f, "{}", self.name())?;
         Ok(())
     }

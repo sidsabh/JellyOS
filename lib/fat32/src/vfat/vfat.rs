@@ -125,7 +125,10 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
                     break;
                 }
                 Status::Free => {
-                    break; // why is this needed for kernel to run -_-
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "Writing: found cluster with free status",
+                    ));
                 },
                 Status::Reserved => {
                     return Err(io::Error::new(
@@ -184,15 +187,14 @@ impl<HANDLE: VFatHandle> VFat<HANDLE> {
     //    reference points directly into a cached sector.
     //
     fn fat_entry(&mut self, cluster: Cluster) -> io::Result<&FatEntry> {
-        let cluster_num: u32 = cluster.into();
-        let entries_per_sector = self.bytes_per_sector / size_of::<u32>() as u16;
-        let fat_sector = self.fat_start_sector + (cluster_num as u64 / entries_per_sector as u64);
-        let mut buf: Vec<u32> = vec![0 as u32; self.bytes_per_sector as usize / size_of::<u32>()];
-        let mod_buf = unsafe { buf.cast_mut::<u8>() };
-        self.device.read_sector(fat_sector, mod_buf)?;
-        let fv: &u32 = &buf[(cluster_num as usize) % entries_per_sector as usize];
-        let fat_entry: &FatEntry = unsafe { &*(&FatEntry(*fv) as *const FatEntry) };
-        Ok(fat_entry)
+        
+
+        let entries_per_sector = self.bytes_per_sector / size_of::<FatEntry>() as u16;
+        let fat_sector: u64 = self.fat_start_sector + (cluster.num() as u64 / entries_per_sector as u64);
+        let buf = self.device.get(fat_sector)?;
+        let entries: &[FatEntry] = unsafe { buf.cast() };
+        
+        Ok(&entries[(cluster.num() as usize) % entries_per_sector as usize])
     }
 
     pub fn get_root_dir(&mut self, handle: &HANDLE) -> io::Result<Dir<HANDLE>> {

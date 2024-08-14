@@ -14,7 +14,6 @@ pub struct File<HANDLE: VFatHandle> {
     pub name : String,
     pub data : Vec<u8>,
     pub offset : usize,
-    pub file_size : u64
 }
 
 impl<HANDLE: VFatHandle> io::Read for File<HANDLE> {
@@ -93,7 +92,7 @@ impl<HANDLE: VFatHandle> traits::File for File<HANDLE> {
     }
 
     fn size(&self) -> u64 {
-        self.file_size
+        self.metadata.size.into()
     }
 }
 

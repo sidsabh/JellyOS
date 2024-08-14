@@ -4,8 +4,8 @@ use shim::io::Write;
 use shim::path::Path;
 use stack_vec::StackVec;
 
-use fat32::traits::FileSystem;
 use fat32::traits::Dir;
+use fat32::traits::FileSystem;
 
 use crate::console::{kprint, kprintln, CONSOLE};
 use crate::FILESYSTEM;
@@ -128,11 +128,10 @@ use alloc::vec::Vec;
 use core::str::from_utf8;
 const ROOT_NAME: &str = "/";
 
-
 use shim::ffi::OsStr;
 const MAX_LINE_LENGTH: usize = 512;
 pub fn shell(prefix: &str) -> ! {
-    let mut pwd  = Path::new(ROOT_NAME).to_path_buf();
+    let mut pwd = Path::new(ROOT_NAME).to_path_buf();
 
     kprintln!("{}", WELCOME_TXT);
 
@@ -189,34 +188,33 @@ pub fn shell(prefix: &str) -> ! {
                         kprintln!("{}", WELCOME_TXT);
                     }
                     Ok(command) if command.path() == "ls" => {
-                        
-                        let hidden = if command.args.contains(&"-a") {
-                            true
-                        } else {
+                        let hide = if command.args.contains(&"-a") {
                             false
+                        } else {
+                            true
                         };
 
-                        let dir_result =  if command.args.len()+(hidden as usize) > 1 {
+                        let dir_result = if command.args.len() > (1 + (!hide as usize)) {
                             match pwd_dir.find(command.args.last().expect("parse error")) {
                                 Ok(fat32::vfat::Entry::DirEntry(res)) => Some(res),
                                 _ => {
                                     kprintln!("error: dir not found");
                                     None
-                                },
+                                }
                             }
                         } else {
                             None
                         };
-    
+
                         let current_dir = dir_result.as_ref().unwrap_or(&pwd_dir);
-    
+
                         current_dir
                             .entries()
                             .expect("entries interator")
                             .collect::<Vec<_>>()
                             .iter()
                             .for_each(|entry| {
-                                if !(hidden && entry.metadata().hidden()) {
+                                if !(hide && entry.metadata().hidden()) {
                                     kprintln!("{}", entry);
                                 }
                             });
@@ -230,13 +228,12 @@ pub fn shell(prefix: &str) -> ! {
                             if dir.first_cluster == 0.into() {
                                 pwd = Path::new(ROOT_NAME).to_path_buf();
                                 pwd_dir = FILESYSTEM.open_dir(&pwd).expect("root directory");
-                            } 
-                            else if target == ".." {
+                            } else if target == ".." {
                                 pwd.pop();
                                 pwd_dir = dir;
                             } else if target == "." {
                                 continue;
-                            }  else {
+                            } else {
                                 pwd = pwd.join(&dir.name);
                                 pwd_dir = dir;
                             }
