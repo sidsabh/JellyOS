@@ -118,14 +118,13 @@ pub struct DirIterator<HANDLE: VFatHandle> {
     directory_data: Vec<VFatDirEntry>,
     index: usize,
     vfat: HANDLE,
-    done: bool,
 }
 
 // this is really something
 impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
     type Item = Entry<HANDLE>;
     fn next(&mut self) -> Option<Self::Item> {
-        if self.done {
+        if self.index >= self.directory_data.len() {
             return None;
         }
 
@@ -181,7 +180,6 @@ impl<HANDLE: VFatHandle> Iterator for DirIterator<HANDLE> {
                     }
                 }
             } else if unknown_entry.file_id == 0x00 {
-                self.done = true;
                 return None;
             } else {
                 // When parsing a directory entry’s name, you must manually add a . to the non-LFN based directory entries to demarcate the file’s extension.
@@ -274,7 +272,6 @@ impl<HANDLE: VFatHandle> traits::Dir for Dir<HANDLE> {
             directory_data: unsafe { data.cast::<VFatDirEntry>() },
             index: 0,
             vfat: self.vfat.clone(),
-            done: false,
         })
     }
 }
