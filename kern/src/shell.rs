@@ -1,3 +1,5 @@
+use fat32::traits::Entry;
+use fat32::traits::Metadata;
 use shim::io::Write;
 use shim::path::Path;
 use stack_vec::StackVec;
@@ -187,13 +189,36 @@ pub fn shell(prefix: &str) -> ! {
                         kprintln!("{}", WELCOME_TXT);
                     }
                     Ok(command) if command.path() == "ls" => {
-                        pwd_dir
+                        
+                        let hidden = if command.args.contains(&"-a") {
+                            true
+                        } else {
+                            false
+                        };
+
+                        let dir_result =  if command.args.len()+(hidden as usize) > 1 {
+                            match pwd_dir.find(command.args.last().expect("parse error")) {
+                                Ok(fat32::vfat::Entry::DirEntry(res)) => Some(res),
+                                _ => {
+                                    kprintln!("error: dir not found");
+                                    None
+                                },
+                            }
+                        } else {
+                            None
+                        };
+    
+                        let current_dir = dir_result.as_ref().unwrap_or(&pwd_dir);
+    
+                        current_dir
                             .entries()
                             .expect("entries interator")
                             .collect::<Vec<_>>()
                             .iter()
                             .for_each(|entry| {
-                                kprintln!("{}", entry);
+                                if !(hidden && entry.metadata().hidden()) {
+                                    kprintln!("{}", entry);
+                                }
                             });
                     }
                     Ok(command) if command.path() == "pwd" => {
