@@ -62,7 +62,9 @@ impl LocalAlloc for Allocator {
             .iter_mut()
             .find(|x| ((x.value() as usize) % layout.align()) == 0)
         {
-            Some(node) if node.value() != core::ptr::null_mut() => node.pop() as *mut u8,
+            Some(node) => {
+                node.pop() as *mut u8
+            },
             _ => {
                 let potential_addr = align_up(self.current, layout.align());
                 match potential_addr.checked_add(1 << (idx + 6)) {
