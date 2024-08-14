@@ -6,11 +6,9 @@ use alloc::vec::Vec;
 use alloc::string::String;
 
 use shim::io;
-use shim::path;
 use shim::path::Path;
 
 use crate::mbr::MasterBootRecord;
-use crate::traits::Entry as EntryTrait;
 use crate::traits::{BlockDevice, FileSystem};
 use crate::util::SliceExt;
 use crate::vfat::{BiosParameterBlock, CachedPartition, Partition};
@@ -213,31 +211,7 @@ impl<'a, HANDLE: VFatHandle> FileSystem for &'a HANDLE {
     type Entry = Entry<HANDLE>;
 
     fn open<P: AsRef<Path>>(self, path: P) -> io::Result<Self::Entry> {
-        let mut curr = Entry::DirEntry(self.lock(|s| s.get_root_dir(&self).unwrap()));
-        for component in path.as_ref().components().skip(1) {
-            match component {
-                // path::Component::Prefix(_) => todo!(),
-                // path::Component::RootDir => todo!(),
-                // path::Component::CurDir => todo!(),
-                // path::Component::ParentDir => todo!(),
-                path::Component::Normal(name) => {
-                    if let Some(dir) = curr.as_dir() {
-                        curr = dir.find(name)?;
-                    } else {
-                        return Err(io::Error::new(
-                            io::ErrorKind::NotFound,
-                            "Path not found",
-                        ));
-                    }
-                }
-                _ => {
-                    return Err(io::Error::new(
-                        io::ErrorKind::NotFound,
-                        "Path not found",
-                    ))
-                }
-            }
-        }
-        Ok(curr)
+        let root_dir = self.lock(|s| s.get_root_dir(&self).unwrap());
+        root_dir.open_path(path.as_ref(), &mut Path::new("/").to_path_buf())
     }
 }

@@ -8,6 +8,7 @@ use hashbrown::HashMap;
 use shim::const_assert_size;
 use shim::ffi::OsStr;
 use shim::io;
+use shim::path::PathBuf;
 
 use crate::traits;
 use crate::traits::Dir as DirTrait;
@@ -16,7 +17,7 @@ use crate::util::VecExt;
 use crate::vfat::{Attributes, Date, Metadata, Time};
 use crate::vfat::{Cluster, Entry, File, VFatHandle};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Dir<HANDLE: VFatHandle> {
     pub vfat: HANDLE,           // file system handle
     pub first_cluster: Cluster, // first cluster
@@ -84,7 +85,7 @@ pub union VFatDirEntry {
     regular: VFatRegularDirEntry,
     long_filename: VFatLfnDirEntry,
 }
-
+use shim::path;
 impl<HANDLE: VFatHandle> Dir<HANDLE> {
     /// Finds the entry named `name` in `self` and returns it. Comparison is
     /// case-insensitive.
@@ -103,7 +104,11 @@ impl<HANDLE: VFatHandle> Dir<HANDLE> {
                     .to_str()
                     .expect("failed to get str from osstr"),
             ) {
-                // bro what is this
+                if let Some(entry_dir) = entry.as_dir() {
+                    if entry_dir.first_cluster.num() == 0 {
+                        return Ok(Entry::DirEntry(self.vfat.lock(|s| s.get_root_dir(&self.vfat).unwrap())));
+                    }
+                }
                 return Ok(entry);
             }
         }
@@ -111,6 +116,52 @@ impl<HANDLE: VFatHandle> Dir<HANDLE> {
             io::ErrorKind::NotFound,
             "no entry with that name",
         ));
+    }
+
+    pub fn open_path<P: AsRef<path::Path>>(&self, path: P, pwd: &mut PathBuf) -> io::Result<Entry<HANDLE>> {
+        let mut curr = Entry::DirEntry(self.clone());
+        for component in path.as_ref().components() {
+            match component {
+                // path::Component::Prefix(_) => todo!(),
+                path::Component::RootDir => {
+                    curr = Entry::DirEntry(self.vfat.lock(|s| s.get_root_dir(&self.vfat.clone()))?);
+                    *pwd = path::Path::new("/").to_path_buf();
+                },
+                path::Component::CurDir => {
+                    continue;
+                },
+                path::Component::ParentDir => {
+                    if let Some(dir) = curr.as_dir() {
+                        curr = dir.find("..")?;
+                        
+                        pwd.pop();
+                    } else {
+                        return Err(io::Error::new(
+                            io::ErrorKind::NotFound,
+                            "No parent dir",
+                        ));
+                    }
+                },
+                path::Component::Normal(name) => {
+                    if let Some(dir) = curr.as_dir() {
+                        curr = dir.find(name)?;
+                        *pwd = pwd.join(name);
+                    } else {
+                        return Err(io::Error::new(
+                            io::ErrorKind::NotFound,
+                            "Path not found",
+                        ));
+                    }
+                }
+                _ => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::NotFound,
+                        "Path not found",
+                    ))
+                }
+            }
+        }
+        Ok(curr)
     }
 }
 

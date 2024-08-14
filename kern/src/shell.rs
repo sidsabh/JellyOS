@@ -127,8 +127,7 @@ use alloc::vec::Vec;
 /// returns if the `exit` command is called.
 use core::str::from_utf8;
 const ROOT_NAME: &str = "/";
-
-use shim::ffi::OsStr;
+use crate::alloc::string::ToString;
 const MAX_LINE_LENGTH: usize = 512;
 pub fn shell(prefix: &str) -> ! {
     let mut pwd = Path::new(ROOT_NAME).to_path_buf();
@@ -139,7 +138,7 @@ pub fn shell(prefix: &str) -> ! {
 
     let mut console = CONSOLE.lock();
     loop {
-        kprint!("({}){} ", pwd.display(), prefix);
+        kprint!("({}){} ", pwd.display().to_string().to_uppercase(), prefix);
         let mut storage = [0; MAX_LINE_LENGTH]; // maxiumum command size
         let mut line: StackVec<u8> = StackVec::new(&mut storage);
         let mut idx = 0;
@@ -195,12 +194,15 @@ pub fn shell(prefix: &str) -> ! {
                         };
 
                         let dir_result = if command.args.len() > (1 + (!hide as usize)) {
-                            match pwd_dir.find(command.args.last().expect("parse error")) {
-                                Ok(fat32::vfat::Entry::DirEntry(res)) => Some(res),
-                                _ => {
-                                    kprintln!("error: dir not found");
-                                    None
-                                }
+                            let path = Path::new(command.args.last().expect("parse error"));
+                            let mut curr_path = pwd.clone();
+                            if let Ok(fat32::vfat::Entry::DirEntry(new_dir)) =
+                                pwd_dir.open_path(path, &mut curr_path)
+                            {
+                                Some(new_dir)
+                            } else {
+                                kprintln!("error: dir {} not found", path.display().to_string().to_uppercase());
+                                None
                             }
                         } else {
                             None
@@ -220,35 +222,29 @@ pub fn shell(prefix: &str) -> ! {
                             });
                     }
                     Ok(command) if command.path() == "pwd" => {
-                        kprintln!("{}", pwd.display());
+                        kprintln!("{}", pwd.display().to_string().to_uppercase());
                     }
                     Ok(command) if command.path() == "cd" => {
-                        let target = OsStr::new(command.args[1]);
-                        if let Ok(fat32::vfat::Entry::DirEntry(dir)) = pwd_dir.find(target) {
-                            if dir.first_cluster == 0.into() {
-                                pwd = Path::new(ROOT_NAME).to_path_buf();
-                                pwd_dir = FILESYSTEM.open_dir(&pwd).expect("root directory");
-                            } else if target == ".." {
-                                pwd.pop();
-                                pwd_dir = dir;
-                            } else if target == "." {
-                                continue;
-                            } else {
-                                pwd = pwd.join(&dir.name);
-                                pwd_dir = dir;
-                            }
+                        let path = Path::new(command.args[1]);
+
+                        if let Ok(fat32::vfat::Entry::DirEntry(new_dir)) =
+                            pwd_dir.open_path(path, &mut pwd)
+                        {
+                            pwd_dir = new_dir;
                         } else {
-                            kprintln!("error: dir not found");
+                            kprintln!("error: dir {} not found", path.display().to_string().to_uppercase());
                         }
                     }
                     Ok(command) if command.path() == "cat" => {
-                        kprintln!("{}", command.args[1]);
-                        if let Ok(fat32::vfat::Entry::FileEntry(entry)) =
-                            pwd_dir.find(command.args[1])
-                        {
-                            kprintln!("{}", entry);
-                        } else {
-                            kprintln!("error: dir not found");
+                        for p in command.args.iter().skip(1) {
+                            let path = Path::new(p);
+                            if let Ok(fat32::vfat::Entry::FileEntry(entry)) =
+                                pwd_dir.open_path(path, &mut pwd.clone())
+                            {
+                                kprintln!("{}", entry);
+                            } else {
+                                kprintln!("error: file {} not found", path.display().to_string().to_uppercase());
+                            }
                         }
                     }
                     Ok(command) => {

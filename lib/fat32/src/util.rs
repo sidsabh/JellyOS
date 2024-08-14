@@ -20,6 +20,7 @@ pub trait VecExt {
     unsafe fn cast<U>(self) -> Vec<U>;
 }
 
+#[allow(dead_code)]
 pub trait SliceExt {
     /// Casts an `&[T]` into an `&[U]`.
     ///
@@ -35,7 +36,6 @@ pub trait SliceExt {
     ///
     /// Panics if the size of `T` and `U` differ or if the alignment of `T` is
     /// not an integer multiple of `U`.
-    #[allow(dead_code)]
     unsafe fn cast<'a, U>(&'a self) -> &'a [U];
 
     /// Casts an `&mut [T]` into an `&mut [U]`.
