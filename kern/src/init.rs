@@ -10,6 +10,7 @@ mod panic;
 use crate::kmain;
 use crate::param::*;
 
+
 global_asm!(include_str!("init/vectors.s"));
 
 //
@@ -91,7 +92,7 @@ unsafe fn switch_to_el1() {
 
         // change execution level to EL1 (ref: C5.2.19)
         SPSR_EL2.set(
-            (SPSR_EL2::M & 0b0101) // EL1h
+            (SPSR_EL2::M & 0b0101) // EL1h // selects stack pointer and return to exception level 1
             | SPSR_EL2::F
             | SPSR_EL2::I
             | SPSR_EL2::D
@@ -99,6 +100,9 @@ unsafe fn switch_to_el1() {
         );
 
         // FIXME: eret to itself, expecting current_el() == 1 this time
+        ELR_EL2.set(switch_to_el1 as u64);
+        asm::eret();
+
     }
 }
 

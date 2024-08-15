@@ -14,7 +14,7 @@
 #![feature(let_chains)]
 #![feature(asm_const)]
 
-#[cfg(not(test))]
+// #[cfg(not(test))] // commenting for rust-analyzer
 mod init;
 
 extern crate alloc;
@@ -28,6 +28,8 @@ pub mod param;
 pub mod process;
 pub mod traps;
 pub mod vm;
+
+
 
 use shell::shell;
 
@@ -48,12 +50,18 @@ use crate::console::kprintln;
 use pi::timer::spin_sleep;
 use core::time::Duration;
 
+use aarch64::current_el;
+
 fn kmain() -> ! {
     spin_sleep(Duration::from_millis(500)); // necessary delay after transmit before tty
 
     unsafe {
         ALLOCATOR.initialize();
         FILESYSTEM.initialize();
+    }
+
+    unsafe {
+        kprintln!("{}", current_el());
     }
 
     shell(">");
