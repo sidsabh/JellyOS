@@ -25,7 +25,7 @@ pub struct Process {
     /// The scheduling state of the process.
     pub state: State,
 }
-use kernel_api::OsResult;
+use kernel_api::{OsResult, OsError};
 impl Process {
     /// Creates a new process with a zeroed `TrapFrame` (the default), a zeroed
     /// stack of the default size, and a state of `Ready`.
@@ -33,7 +33,17 @@ impl Process {
     /// If enough memory could not be allocated to start the process, returns
     /// `None`. Otherwise returns `Some` of the new `Process`.
     pub fn new() -> OsResult<Process> {
-        unimplemented!("Process::new()")
+        let tf = Box::new(TrapFrame::default());
+        let stack = Stack::new().ok_or(OsError::NoMemory)?;
+        let state = State::Ready;
+
+        let p = Process {
+            context: tf,
+            stack,
+            state
+        };
+
+        Ok(p)
     }
 
     /// Load a program stored in the given path by calling `do_load()` method.
