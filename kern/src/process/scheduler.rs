@@ -73,7 +73,7 @@ impl GlobalScheduler {
         p.context.pstate |= 1 << 7; // SPSR_EL1::I; // disable IRQ exceptions
         p.context.pstate &= !0b1100; // CurrentEL::EL ; // set current EL to 0
 
-        let frame_addr = p.context.as_ref();
+        let frame_addr = p.context.as_ref() as *const TrapFrame as *const u64 as u64;
 
         unsafe {
             asm!(
@@ -199,9 +199,6 @@ use aarch64::current_el;
 extern "C" fn run_shell() {
     unsafe { asm!("brk 1"); }
     unsafe { asm!("brk 2"); }
-    unsafe {
-        kprintln!("CurrentEL: {}", current_el());
-    }
     shell::shell("user0> ");
     unsafe { asm!("brk 3"); }
     loop { shell::shell("user1> "); }
