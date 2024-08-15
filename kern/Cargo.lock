@@ -3,6 +3,10 @@
 version = 3
 
 [[package]]
+name = "aarch64"
+version = "0.1.0"
+
+[[package]]
 name = "ahash"
 version = "0.2.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -100,10 +104,19 @@ dependencies = [
 name = "kernel"
 version = "0.1.0"
 dependencies = [
+ "aarch64",
  "fat32",
+ "kernel_api",
  "pi",
  "shim",
  "stack-vec",
+]
+
+[[package]]
+name = "kernel_api"
+version = "0.1.0"
+dependencies = [
+ "shim",
 ]
 
 [[package]]

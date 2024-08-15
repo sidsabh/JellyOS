@@ -37,16 +37,12 @@ impl Timer {
         micros |= (self.registers.CHI.read() as u64) << 32;
         Duration::from_micros(micros)
     }
-
+    
     /// Sets up a match in timer 1 to occur `t` duration from now. If
     /// interrupts for timer 1 are enabled and IRQs are unmasked, then a timer
     /// interrupt will be issued in `t` duration.
     pub fn tick_in(&mut self, t: Duration) {
-        let time = self.registers.CLO.read();
-        let tick_at = time.wrapping_add(t.as_micros() as u32);
-
-        self.registers.COMPARE[1].write(tick_at);
-        self.registers.CS.write(0b10);
+        unimplemented!()
     }
 }
 

@@ -1,6 +1,9 @@
 #![cfg_attr(not(test), no_std)]
 #![cfg_attr(not(test), no_main)]
 // features
+#![allow(internal_features)]
+#![feature(ptr_internals)]
+#![feature(raw_vec_internals)]
 #![feature(prelude_2024)]
 #![feature(alloc_error_handler)]
 #![feature(decl_macro)]
@@ -20,15 +23,25 @@ pub mod console;
 pub mod fs;
 pub mod mutex;
 pub mod shell;
+pub mod param;
+pub mod process;
+pub mod traps;
+pub mod vm;
 
 use shell::shell;
 
 use allocator::Allocator;
 use fs::FileSystem;
+use process::GlobalScheduler;
+use traps::irq::Irq;
+use vm::VMManager;
 
 #[cfg_attr(not(test), global_allocator)]
 pub static ALLOCATOR: Allocator = Allocator::uninitialized();
 pub static FILESYSTEM: FileSystem = FileSystem::uninitialized();
+pub static SCHEDULER: GlobalScheduler = GlobalScheduler::uninitialized();
+pub static VMM: VMManager = VMManager::uninitialized();
+pub static IRQ: Irq = Irq::uninitialized();
 
 use crate::console::kprintln;
 use pi::timer::spin_sleep;
