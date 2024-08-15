@@ -250,6 +250,9 @@ pub fn shell(prefix: &str) {
                     Ok(command) if command.path() == "exit" => {
                         break 'exit;
                     }
+                    Ok(command) if command.path() == "prefix" => {
+                        kprintln!("prefix {}", prefix);
+                    }
                     Ok(command) => {
                         kprintln!("unknown command: {}", command.path());
                     }

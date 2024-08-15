@@ -43,11 +43,12 @@ use crate::shell;
 /// the trap frame for the exception.
 #[no_mangle]
 pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
-    kprintln!("{:#?}, {}", info, esr);
-    if info.kind == Kind::Synchronous && let Syndrome::Brk(imm) = Syndrome::from(esr) {
-        kprintln!("{}", imm);
+    // kprintln!("{:#?}, {}", info, esr);
+    if info.kind == Kind::Synchronous && let Syndrome::Brk(_) = Syndrome::from(esr) {
+        // kprintln!("{}", imm);
         shell("#");
+        // Preferred Exception Return Address for synchronous 
+        // is the address of instr that generated exception
+        tf.pc += 4;
     }
-
-    loop {aarch64::nop()}
 }
