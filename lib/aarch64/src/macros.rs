@@ -10,43 +10,44 @@ macro_rules! define_bitfield {
         pub const $field: u64 = $( define_mask!($end, $beg) )|*;
     };
 }
-
 #[macro_export]
 macro_rules! defreg {
-    ($regname:ident) => { defreg!($regname, []); };
+    ($regname:ident) => {
+        defreg!($regname, []);
+    };
     ($regname:ident, [$($field:ident $bits:tt,)*]) => {
         #[allow(non_snake_case)]
         pub mod $regname {
             pub struct Register;
+            use core::arch::asm;
+
             impl Register {
                 #[inline(always)]
                 pub unsafe fn get(&self) -> u64 {
-                    let rtn;
-                    asm!(concat!("mrs $0, ", stringify!($regname))
-                         : "=r"(rtn) ::: "volatile");
+                    let rtn: u64;
+                    asm!(concat!("mrs {0}, ", stringify!($regname)),
+                         out(reg) rtn,
+                         options(nomem, nostack, preserves_flags));
                     rtn
                 }
 
                 #[inline(always)]
                 pub unsafe fn get_masked(&self, mask: u64) -> u64 {
-                    let rtn: u64;
-                    asm!(concat!("mrs $0, ", stringify!($regname))
-                         : "=r"(rtn) ::: "volatile");
-                    rtn & mask
+                    let val = self.get();
+                    val & mask
                 }
 
                 #[inline(always)]
                 pub unsafe fn get_value(&self, mask: u64) -> u64 {
-                    let rtn: u64;
-                    asm!(concat!("mrs $0, ", stringify!($regname))
-                         : "=r"(rtn) ::: "volatile");
-                    (rtn & mask) >> (mask.trailing_zeros())
+                    let val = self.get();
+                    (val & mask) >> mask.trailing_zeros()
                 }
 
                 #[inline(always)]
                 pub unsafe fn set(&self, val: u64) {
-                    asm!(concat!("msr ", stringify!($regname), ", $0")
-                         :: "r"(val) :: "volatile");
+                    asm!(concat!("msr ", stringify!($regname), ", {0}"),
+                         in(reg) val,
+                         options(nomem, nostack, preserves_flags));
                 }
             }
 
@@ -57,7 +58,7 @@ macro_rules! defreg {
 
             #[inline(always)]
             pub fn get_value(val: u64, mask: u64) -> u64 {
-                (val & mask) >> (mask.trailing_zeros())
+                (val & mask) >> mask.trailing_zeros()
             }
 
             $( define_bitfield!($field, $bits); )*

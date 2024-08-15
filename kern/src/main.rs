@@ -12,6 +12,7 @@
 #![feature(const_mut_refs)]
 #![feature(const_option)]
 #![feature(let_chains)]
+#![feature(asm_const)]
 
 #[cfg(not(test))]
 mod init;

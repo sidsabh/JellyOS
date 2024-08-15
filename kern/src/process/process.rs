@@ -25,7 +25,7 @@ pub struct Process {
     /// The scheduling state of the process.
     pub state: State,
 }
-
+use kernel_api::OsResult;
 impl Process {
     /// Creates a new process with a zeroed `TrapFrame` (the default), a zeroed
     /// stack of the default size, and a state of `Ready`.

@@ -12,7 +12,7 @@ use crate::param::{KERNEL_MASK_BITS, USER_MASK_BITS};
 
 /// Thread-safe (locking) wrapper around a kernel page table.
 pub struct VMManager(Mutex<Option<KernPageTable>>);
-
+use core::arch::asm;
 impl VMManager {
     /// Returns an uninitialized `VMManager`.
     ///

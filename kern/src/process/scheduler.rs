@@ -145,22 +145,31 @@ impl Scheduler {
     }
 }
 
-pub extern "C" fn  test_user_process() -> ! {
+
+use core::arch::asm;
+
+pub extern "C" fn test_user_process() -> ! {
     loop {
         let ms = 10000;
         let error: u64;
         let elapsed_ms: u64;
 
         unsafe {
-            asm!("mov x0, $2
-              svc 1
-              mov $0, x0
-              mov $1, x7"
-                 : "=r"(elapsed_ms), "=r"(error)
-                 : "r"(ms)
-                 : "x0", "x7"
-                 : "volatile");
+            asm!(
+                "mov x0, {ms:x}",
+                "svc {svc_num}",
+                "mov {ems}, x0",
+                "mov {error}, x7",
+                ms = in(reg) ms,
+                svc_num = const 1,
+                ems = out(reg) elapsed_ms,
+                error = out(reg) error,
+                out("x0") _,   // Clobbers x0
+                out("x7") _,   // Clobbers x7
+                options(nostack),
+            );
         }
+
+        // You might want to add some logic here to do something with `elapsed_ms` and `error`
     }
 }
-

@@ -1,7 +1,6 @@
-#![feature(asm)]
-#![feature(global_asm)]
+// #![cfg_attr(not(test), no_std)]
+#![no_std]
 
-#![cfg_attr(not(test), no_std)]
 
 #[macro_use]
 pub mod macros;
@@ -15,7 +14,6 @@ pub use sp::SP;
 pub use regs::*;
 pub use vmsa::*;
 pub use asm::*;
-use core::arch::asm;
 
 
 /// Returns the current exception level.

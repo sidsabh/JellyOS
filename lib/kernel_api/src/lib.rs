@@ -1,4 +1,4 @@
-#![feature(asm)]
+#![feature(asm_const)]
 #![no_std]
 
 use core::fmt;

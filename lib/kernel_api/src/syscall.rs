@@ -14,6 +14,7 @@ macro_rules! err_or {
         }
     }};
 }
+use core::arch::asm;
 
 pub fn sleep(span: Duration) -> OsResult<Duration> {
     if span.as_millis() > core::u64::MAX as u128 {
@@ -25,14 +26,19 @@ pub fn sleep(span: Duration) -> OsResult<Duration> {
     let mut elapsed_ms: u64;
 
     unsafe {
-        asm!("mov x0, $2
-              svc $3
-              mov $0, x0
-              mov $1, x7"
-             : "=r"(elapsed_ms), "=r"(ecode)
-             : "r"(ms), "i"(NR_SLEEP)
-             : "x0", "x7"
-             : "volatile");
+        asm!(
+            "mov x0, {ms}",
+            "svc {nr_sleep}",
+            "mov {elapsed_ms}, x0",
+            "mov {ecode}, x7",
+            ms = in(reg) ms,
+            nr_sleep = const NR_SLEEP,
+            elapsed_ms = out(reg) elapsed_ms,
+            ecode = out(reg) ecode,
+            out("x0") _,   // Clobbers x0
+            out("x7") _,   // Clobbers x7
+            options(nostack),
+        );
     }
 
     err_or!(ecode, Duration::from_millis(elapsed_ms))

@@ -8,6 +8,18 @@ authors = [
     "Sujin Park <sujin.park@gatech.edu>",
     "Mansour Alharthi <mansourah@gatech.edu>"
 ]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+
+[profile.test]
+panic = "abort"
+
+[profile.bench]
+panic = "abort"
