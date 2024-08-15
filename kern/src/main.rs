@@ -64,6 +64,13 @@ fn kmain() -> ! {
         kprintln!("{}", current_el());
     }
 
-    shell(">");
+    use core::arch::asm;
+    unsafe {
+        asm!("brk 2");
+    }
+
+    loop {
+        shell(">");
+    }
 }
 

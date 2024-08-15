@@ -129,7 +129,7 @@ use core::str::from_utf8;
 const ROOT_NAME: &str = "/";
 use crate::alloc::string::ToString;
 const MAX_LINE_LENGTH: usize = 512;
-pub fn shell(prefix: &str) -> ! {
+pub fn shell(prefix: &str) {
     let mut pwd = Path::new(ROOT_NAME).to_path_buf();
 
     kprintln!("{}", WELCOME_TXT);
@@ -137,8 +137,8 @@ pub fn shell(prefix: &str) -> ! {
     let mut pwd_dir = FILESYSTEM.open_dir(&pwd).expect("directory");
 
     let mut console = CONSOLE.lock();
-    loop {
-        kprint!("({}){} ", pwd.display().to_string().to_uppercase(), prefix);
+    'exit: loop {
+        kprint!("({}) {} ", pwd.display().to_string().to_uppercase(), prefix);
         let mut storage = [0; MAX_LINE_LENGTH]; // maxiumum command size
         let mut line: StackVec<u8> = StackVec::new(&mut storage);
         let mut idx = 0;
@@ -246,6 +246,9 @@ pub fn shell(prefix: &str) -> ! {
                                 kprintln!("error: file {} not found", path.display().to_string().to_uppercase());
                             }
                         }
+                    }
+                    Ok(command) if command.path() == "exit" => {
+                        break 'exit;
                     }
                     Ok(command) => {
                         kprintln!("unknown command: {}", command.path());

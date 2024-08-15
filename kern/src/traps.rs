@@ -3,6 +3,8 @@ mod syndrome;
 mod syscall;
 
 pub mod irq;
+use crate::console::kprintln;
+
 pub use self::frame::TrapFrame;
 
 use pi::interrupt::{Controller, Interrupt};
@@ -34,12 +36,18 @@ pub struct Info {
     source: Source,
     kind: Kind,
 }
-
+use crate::shell;
 /// This function is called when an exception occurs. The `info` parameter
 /// specifies the source and kind of exception that has occurred. The `esr` is
 /// the value of the exception syndrome register. Finally, `tf` is a pointer to
 /// the trap frame for the exception.
 #[no_mangle]
 pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
-    unimplemented!("handle_exception");
+    kprintln!("{:#?}, {}", info, esr);
+    if info.kind == Kind::Synchronous && let Syndrome::Brk(imm) = Syndrome::from(esr) {
+        kprintln!("{}", imm);
+        shell("#");
+    }
+
+    loop {aarch64::nop()}
 }
