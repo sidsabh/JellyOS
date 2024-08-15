@@ -50,7 +50,6 @@ use crate::console::kprintln;
 use pi::timer::spin_sleep;
 use core::time::Duration;
 
-use aarch64::current_el;
 
 fn kmain() -> ! {
     spin_sleep(Duration::from_millis(500)); // necessary delay after transmit before tty
@@ -58,19 +57,20 @@ fn kmain() -> ! {
     unsafe {
         ALLOCATOR.initialize();
         FILESYSTEM.initialize();
+        SCHEDULER.start()
     }
 
-    unsafe {
-        kprintln!("{}", current_el());
-    }
+    // unsafe {
+    //     use aarch64::current_el;
+    //     kprintln!("{}", current_el());
+    // }
+    // use core::arch::asm;
+    // unsafe {
+    //     asm!("brk 2");
+    // }
 
-    use core::arch::asm;
-    unsafe {
-        asm!("brk 2");
-    }
-
-    loop {
-        shell(">");
-    }
+    // loop {
+    //     shell(">");
+    // }
 }
 

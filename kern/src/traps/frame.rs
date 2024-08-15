@@ -5,8 +5,8 @@ use shim::const_assert_size;
 #[derive(Default, Copy, Clone, Debug)]
 pub struct TrapFrame {
     pub pc : u64,
-    pstate : u64,
-    sp : u64,
+    pub pstate : u64,
+    pub sp : u64,
     tpidr : u64,
     big_regs : [u128; 32],
     regs : [u64; 31],

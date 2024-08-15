@@ -1,9 +1,11 @@
 use alloc::boxed::Box;
 use alloc::collections::vec_deque::VecDeque;
 use core::fmt;
+use core::ops::{BitAnd, BitOr};
 
 use aarch64::*;
 
+use crate::console::kprintln;
 use crate::mutex::Mutex;
 use crate::param::{PAGE_MASK, PAGE_SIZE, TICK, USER_IMG_BASE};
 use crate::process::{Id, Process, State};
@@ -29,7 +31,6 @@ impl GlobalScheduler {
         let mut guard = self.0.lock();
         f(guard.as_mut().expect("scheduler uninitialized"))
     }
-
 
     /// Adds a process to the scheduler's queue and returns that process's ID.
     /// For more details, see the documentation on `Scheduler::add()`.
@@ -66,7 +67,27 @@ impl GlobalScheduler {
     /// Starts executing processes in user space using timer interrupt based
     /// preemptive scheduling. This method should not return under normal conditions.
     pub fn start(&self) -> ! {
-        unimplemented!("GlobalScheduler::start()")
+        let mut p = Process::new().expect("failed to make process");
+        p.context.pc = run_shell as *const () as *const u64 as u64;
+        p.context.sp = p.stack.top().as_u64();
+        p.context.pstate |= 1 << 7; // SPSR_EL1::I; // disable IRQ exceptions
+        p.context.pstate &= !0b1100; // CurrentEL::EL ; // set current EL to 0
+
+        let frame_addr = p.context.as_ref();
+
+        unsafe {
+            asm!(
+                "mov SP, {context:x}",
+                "bl context_restore",
+                "adr x0, _start",
+                "mov SP, x0",
+                "mov x0, xzr",
+                "eret",
+                context = in(reg) frame_addr
+            );
+        }
+
+        loop {}
     }
 
     /// Initializes the scheduler and add userspace processes to the Scheduler
@@ -145,7 +166,6 @@ impl Scheduler {
     }
 }
 
-
 use core::arch::asm;
 
 pub extern "C" fn test_user_process() -> ! {
@@ -172,4 +192,17 @@ pub extern "C" fn test_user_process() -> ! {
 
         // You might want to add some logic here to do something with `elapsed_ms` and `error`
     }
+}
+
+use crate::shell;
+use aarch64::current_el;
+extern "C" fn run_shell() {
+    unsafe { asm!("brk 1"); }
+    unsafe { asm!("brk 2"); }
+    unsafe {
+        kprintln!("CurrentEL: {}", current_el());
+    }
+    shell::shell("user0> ");
+    unsafe { asm!("brk 3"); }
+    loop { shell::shell("user1> "); }
 }
