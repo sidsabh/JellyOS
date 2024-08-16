@@ -1,5 +1,5 @@
-.global vec_context_save
-vec_context_save:
+.global vec_context_switch
+vec_context_switch:
     
     mov x28, lr
     
@@ -12,10 +12,10 @@ vec_context_save:
     bl handle_exception
 
     mov lr, x28
-    b context_restore // teleport
+    b vec_context_restore // teleport
 
-.global context_save
-context_save:
+.global vec_context_save
+vec_context_save:
 
     stp x26, x27, [SP, #-16]!
     stp x24, x25, [SP, #-16]!
@@ -60,8 +60,8 @@ context_save:
     ret
 
 
-.global context_restore
-context_restore:
+.global vec_context_restore
+vec_context_restore:
     
     ldp x0, x1, [SP], #16
     msr ELR_EL1, x0
@@ -113,7 +113,7 @@ context_restore:
     
     mov     x29, \source
     movk    x29, \kind, LSL #16
-    bl      vec_context_save
+    bl      vec_context_switch
     
     ldp     x28, x29, [SP], #16
     ldp     lr, xzr, [SP], #16

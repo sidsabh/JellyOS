@@ -5,8 +5,8 @@
 
 .section .text.init
 
-.global _start
-_start:
+.global asm_start
+asm_start:
     // read cpu affinity, start core 0, halt rest
     mrs     x1, MPIDR_EL1
     and     x1, x1, #3
@@ -26,7 +26,7 @@ setup:
     and     x0, x0, #0b1100
     lsr     x0, x0, #2
 
-switch_to_el2:
+asm_switch_to_el2:
     // switch to EL2 if we're in EL3. otherwise switch to EL1
     cmp     x0, 0b11            // EL3
     bne     switch_to_el1
@@ -42,7 +42,7 @@ switch_to_el2:
     msr     ELR_EL3, x2
     eret
 
-switch_to_el1:
+asm_switch_to_el1:
     // switch to EL1 if we're not already in EL1. otherwise continue with start
     cmp     x0, 0b01    // EL1
     beq     set_stack
@@ -92,12 +92,94 @@ go_kmain:
     bl      kinit
     b       halt
 
-context_save:
-    // FIXME: Save the remaining context to the stack.
-
 .global context_restore
 context_restore:
-    // FIXME: Restore the context from the stack.
+    ldp x0, x1, [SP], #16
+    msr ELR_EL1, x0
+    msr SPSR_EL1, x1
+
+    ldp x0, x1, [SP], #16
+    msr SP_EL0, x0
+    msr TPIDR_EL0, x1
+
+    ldp q0, q1, [SP], #16
+    ldp q2, q3, [SP], #16
+    ldp q4, q5, [SP], #16
+    ldp q6, q7, [SP], #16
+    ldp q8, q9, [SP], #16
+    ldp q10, q11, [SP], #16
+    ldp q12, q13, [SP], #16
+    ldp q14, q15, [SP], #16
+    ldp q16, q17, [SP], #16
+    ldp q18, q19, [SP], #16
+    ldp q20, q21, [SP], #16
+    ldp q22, q23, [SP], #16
+    ldp q24, q25, [SP], #16
+    ldp q26, q27, [SP], #16
+    ldp q28, q29, [SP], #16
+    ldp q30, q31, [SP], #16
+
+    ldp x0, x1, [SP], #16
+    ldp x2, x3, [SP], #16
+    ldp x4, x5, [SP], #16
+    ldp x6, x7, [SP], #16
+    ldp x8, x9, [SP], #16
+    ldp x10, x11, [SP], #16
+    ldp x12, x13, [SP], #16
+    ldp x14, x15, [SP], #16
+    ldp x16, x17, [SP], #16
+    ldp x18, x19, [SP], #16
+    ldp x20, x21, [SP], #16
+    ldp x22, x23, [SP], #16
+    ldp x24, x25, [SP], #16
+    ldp x26, x27, [SP], #16
+    ldp x28, x29, [SP], #16
+    ldp lr, xzr, [SP], #16
+    
+    ret
+
+context_save:
+    stp lr, xzr, [SP, #-16]!
+    stp x28, x29, [SP, #-16]!
+    stp x26, x27, [SP, #-16]!
+    stp x24, x25, [SP, #-16]!
+    stp x22, x23, [SP, #-16]!
+    stp x20, x21, [SP, #-16]!
+    stp x18, x19, [SP, #-16]!
+    stp x16, x17, [SP, #-16]!
+    stp x14, x15, [SP, #-16]!
+    stp x12, x13, [SP, #-16]!
+    stp x10, x11, [SP, #-16]!
+    stp x8, x9, [SP, #-16]!
+    stp x6, x7, [SP, #-16]!
+    stp x4, x5, [SP, #-16]!
+    stp x2, x3, [SP, #-16]!
+    stp x0, x1, [SP, #-16]!
+
+    stp q30, q31, [SP, #-16]!
+    stp q28, q29, [SP, #-16]!
+    stp q26, q27, [SP, #-16]!
+    stp q24, q25, [SP, #-16]!
+    stp q22, q23, [SP, #-16]!
+    stp q20, q21, [SP, #-16]!
+    stp q18, q19, [SP, #-16]!
+    stp q16, q17, [SP, #-16]!
+    stp q14, q15, [SP, #-16]!
+    stp q12, q13, [SP, #-16]!
+    stp q10, q11, [SP, #-16]!
+    stp q8, q9, [SP, #-16]!
+    stp q6, q7, [SP, #-16]!
+    stp q4, q5, [SP, #-16]!
+    stp q2, q3, [SP, #-16]!
+    stp q0, q1, [SP, #-16]!
+
+    mrs x0, SP_EL0
+    mrs x1, TPIDR_EL0
+    stp x0, x1, [SP, #-16]!
+    
+    mrs x0, ELR_EL1
+    mrs x1, SPSR_EL1
+    stp x0, x1, [SP, #-16]!
 
     ret
 

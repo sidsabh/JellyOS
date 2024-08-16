@@ -3,6 +3,7 @@ use alloc::collections::vec_deque::VecDeque;
 use core::borrow::Borrow;
 use core::fmt;
 use core::ops::{BitAnd, BitOr};
+use core::time::Duration;
 
 use aarch64::*;
 
@@ -70,13 +71,18 @@ impl GlobalScheduler {
 
     /// Starts executing processes in user space using timer interrupt based
     /// preemptive scheduling. This method should not return under normal conditions.
-    pub fn start(&self) -> ! {
+    pub fn start(&'static self) -> ! {
         // register handler fn for timer
         IRQ.register(
             pi::interrupt::Interrupt::Timer1,
             Box::new(|tf: &mut TrapFrame| {
-                kprintln!("got timer interrupted");
+                // tf was the interrupted processes' trap frame
                 timer::tick_in(crate::param::TICK);
+                self.switch(State::Ready, tf);
+
+                // if let Some(id) = self.kill(tf) {
+                //     kprintln!("{}", id);
+                // }
             }),
         );
 
@@ -86,23 +92,30 @@ impl GlobalScheduler {
         // set timer interupt
         timer::tick_in(crate::param::TICK);
 
+
+        // run first
+        // self.switch_to(&mut TrapFrame::default());
+
         let mut p = Process::new().expect("failed to make process");
-        p.context.pc = run_shell as *const () as *const u64 as u64;
+        p.context.pc = idle_proc as *const () as *const u64 as u64;
+        // p.context.pc = GlobalScheduler::switch_to as *const () as *const u64 as u64;
         p.context.sp = p.stack.top().as_u64();
         p.context.pstate |= 1 << 6; // enable IRQ exceptions
-        p.context.pstate &= !0b1100; // set current EL to 0
+        p.context.pstate |= 0b0100; // set current EL to 0
+        p.context.tpidr = 42;
 
         let frame_addr = p.context.as_ref() as *const TrapFrame as *const u64 as u64;
 
         unsafe {
             asm!(
                 "mov SP, {context:x}",
-                "bl context_restore",
+                "bl vec_context_restore",
                 "adr x0, _start",
                 "mov SP, x0",
                 "mov x0, xzr",
+                "mov x1, {context:x}",
                 "eret",
-                context = in(reg) frame_addr
+                context = in(reg) frame_addr,
             );
         }
 
@@ -111,7 +124,23 @@ impl GlobalScheduler {
 
     /// Initializes the scheduler and add userspace processes to the Scheduler
     pub unsafe fn initialize(&self) {
-        unimplemented!("GlobalScheduler::initialize()")
+        *self.0.lock() = Some(Scheduler::new());
+
+        let mut p1 = Process::new().expect("failed to make process");
+        p1.context.pc = proc1 as *const () as *const u64 as u64;
+        p1.context.sp = p1.stack.top().as_u64();
+        p1.context.pstate |= 1 << 6; // enable IRQ exceptions
+        p1.context.pstate &= !0b1100; // set current EL to 0
+
+        self.add(p1);
+
+        let mut p2 = Process::new().expect("failed to make process");
+        p2.context.pc = proc2 as *const () as *const u64 as u64;
+        p2.context.sp = p2.stack.top().as_u64();
+        p2.context.pstate |= 1 << 6; // enable IRQ exceptions
+        p2.context.pstate &= !0b1100; // set current EL to 0
+
+        self.add(p2);
     }
 
     // The following method may be useful for testing Phase 3:
@@ -155,18 +184,11 @@ impl Scheduler {
     /// It is the caller's responsibility to ensure that the first time `switch`
     /// is called, that process is executing on the CPU.
     fn add(&mut self, mut process: Process) -> Option<Id> {
-        let new_id = if let Some(id) = self.last_id {
-            id + 1
-        } else {
-            0
-        };
+        let new_id = self.processes.len() as u64;
 
         process.context.tpidr = new_id;
         self.processes.push_back(process);
-
-        let res = Some(new_id);
-        self.last_id = res;
-        res
+        Some(new_id)
     }
 
     /// Finds the currently running process, sets the current process's state
@@ -178,7 +200,7 @@ impl Scheduler {
     /// returns `false`. Otherwise, returns `true`.
     fn schedule_out(&mut self, new_state: State, tf: &mut TrapFrame) -> bool {
         for (i, p) in self.processes.iter_mut().enumerate() {
-            if let State::Running = p.state && p.context.tpidr == tf.tpidr {
+            if matches!(p.state, State::Running) && p.context.tpidr == tf.tpidr {
                 p.state = new_state;
                 p.context = Box::new(*tf);
                 let rproc = self.processes.remove(i).unwrap();
@@ -197,31 +219,17 @@ impl Scheduler {
     /// If there is no process to switch to, returns `None`. Otherwise, returns
     /// `Some` of the next process`s process ID.
     fn switch_to(&mut self, tf: &mut TrapFrame) -> Option<Id> {
-
         for (i, p) in self.processes.iter_mut().enumerate() {
             if p.is_ready() {
-                p.state = State::Running;    
+                p.state = State::Running;
                 let rproc = self.processes.remove(i).unwrap();
-
-                let tid = rproc.context.tpidr;
-                let next_tf = rproc.context.as_ref() as *const TrapFrame as *const u64 as u64;
-                let curr_tf = tf as *const TrapFrame as *const u64 as u64;
-
+                let pid = rproc.context.tpidr;
+                
+                *tf = *rproc.context; // context switch bro
                 self.processes.push_front(rproc);
 
-                // context switch
-                unsafe {
-                    asm!(
-                        "mov SP, {save_context:x}",
-                        "bl context_save",
-                        "mov SP, {restore_context:x}",
-                        "bl context_restore",
-                        save_context = in(reg) curr_tf,
-                        restore_context = in(reg) next_tf
-                    );
-                }
-
-                return Some(tid);
+                self.last_id = Some(pid);
+                return Some(pid);
             }
         }
         None
@@ -231,7 +239,16 @@ impl Scheduler {
     /// as `Dead` state. Removes the dead process from the queue, drop the
     /// dead process's instance, and returns the dead process's process ID.
     fn kill(&mut self, tf: &mut TrapFrame) -> Option<Id> {
-        unimplemented!("Scheduler::kill()")
+        for (i, p) in self.processes.iter_mut().enumerate() {
+            if matches!(p.state, State::Running) && p.context.tpidr == tf.tpidr {
+                p.state = State::Dead;
+                let rproc = self.processes.remove(i).unwrap();
+                let pid = rproc.context.tpidr;
+                drop(rproc);  // Explicitly drop the process instance
+                return Some(pid);
+            }
+        }
+        None
     }
 }
 
@@ -265,17 +282,26 @@ pub extern "C" fn test_user_process() -> ! {
 
 use crate::shell;
 use aarch64::current_el;
-extern "C" fn run_shell() {
-    unsafe {
-        asm!("brk 1");
-    }
-    unsafe {
-        asm!("brk 2");
-    }
-    unsafe {
-        asm!("brk 3");
-    }
+
+extern "C" fn idle_proc() {
     loop {
-        shell::shell("user1> ");
+        kprintln!("idle proc here");
+        timer::spin_sleep(Duration::from_secs(1));
+    }
+}
+
+
+extern "C" fn proc1() {
+    loop {
+        kprintln!("proc1 here");
+        timer::spin_sleep(Duration::from_secs(1));
+    }
+}
+
+
+extern "C" fn proc2() {
+    loop {
+        kprintln!("proc2 here");
+        timer::spin_sleep(Duration::from_secs(1));
     }
 }
