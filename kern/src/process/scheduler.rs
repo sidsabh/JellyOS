@@ -74,7 +74,7 @@ impl GlobalScheduler {
         IRQ.register(
             pi::interrupt::Interrupt::Timer1,
             Box::new(|tf: &mut TrapFrame| {
-                kprintln!("got timer interrupted with tf {:#?}", tf);
+                kprintln!("got timer interrupted");
                 timer::tick_in(crate::param::TICK);
             }),
         );

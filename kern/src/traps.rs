@@ -45,7 +45,6 @@ use crate::{shell, IRQ};
 #[no_mangle]
 pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
 
-    kprintln!("in handle_exception...");
     if info.kind == Kind::Synchronous {
         kprintln!("{:#?}, {}, {:#?}", info, esr, Syndrome::from(esr));
         // Preferred Exception Return Address for synchronous
@@ -54,7 +53,6 @@ pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
     }
 
     if info.kind == Kind::Irq {
-        kprintln!("made it");
         let controller = Controller::new();
         for i in Interrupt::iter() {
             if controller.is_pending(*i) {
