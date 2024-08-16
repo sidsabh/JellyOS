@@ -7,6 +7,7 @@ use crate::console::kprintln;
 
 pub use self::frame::TrapFrame;
 
+use aarch64::current_el;
 use pi::interrupt::{Controller, Interrupt};
 
 use self::syndrome::Syndrome;
@@ -36,17 +37,30 @@ pub struct Info {
     source: Source,
     kind: Kind,
 }
-use crate::shell;
+use crate::{shell, IRQ};
 /// This function is called when an exception occurs. The `info` parameter
 /// specifies the source and kind of exception that has occurred. The `esr` is
 /// the value of the exception syndrome register. Finally, `tf` is a pointer to
 /// the trap frame for the exception.
 #[no_mangle]
 pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
-    kprintln!("{:#?}, {}, {:#?}", info, esr, Syndrome::from(esr));
+
+    kprintln!("in handle_exception...");
     if info.kind == Kind::Synchronous {
-        // Preferred Exception Return Address for synchronous 
+        kprintln!("{:#?}, {}, {:#?}", info, esr, Syndrome::from(esr));
+        // Preferred Exception Return Address for synchronous
         // is the address of instr that generated exception
         tf.pc += 4;
+    }
+
+    if info.kind == Kind::Irq {
+        kprintln!("made it");
+        let controller = Controller::new();
+        for i in Interrupt::iter() {
+            if controller.is_pending(*i) {
+                kprintln!("{:#?}, idx:{:#?} ", info, Interrupt::to_index(*i));
+                IRQ.invoke(*i, tf);
+            }
+        }
     }
 }

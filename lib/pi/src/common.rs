@@ -1,5 +1,5 @@
 /// The address where I/O peripherals are mapped to.
-pub const IO_BASE: usize = 0x3F000000;
+pub const IO_BASE: usize = 0x3F000000; // In short, a peripheral address 0x7EXXXXXX is at physical address 0x3FXXXXXX on the BCM2837. 
 pub const IO_BASE_END: usize = 0x40000000;
 pub const CLOCK_HZ: u64 = 250 * 1000 * 1000;
 

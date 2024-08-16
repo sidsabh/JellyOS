@@ -10,7 +10,10 @@ use crate::mutex::Mutex;
 use crate::param::{PAGE_MASK, PAGE_SIZE, TICK, USER_IMG_BASE};
 use crate::process::{Id, Process, State};
 use crate::traps::TrapFrame;
-use crate::VMM;
+use crate::{IRQ, VMM};
+
+use pi::timer;
+use pi::interrupt;
 
 /// Process scheduler for the entire machine.
 #[derive(Debug)]
@@ -64,14 +67,27 @@ impl GlobalScheduler {
         self.critical(|scheduler| scheduler.kill(tf))
     }
 
+
+
     /// Starts executing processes in user space using timer interrupt based
     /// preemptive scheduling. This method should not return under normal conditions.
     pub fn start(&self) -> ! {
+
+        
+        // enable timer interrupts
+        interrupt::Controller::new().enable(interrupt::Interrupt::Timer1);
+
+        // register handler fn for timer
+        IRQ.register(pi::interrupt::Interrupt::Timer1, Box::new(timer_handler));
+
+        // set timer interupt
+        timer::tick_in(crate::param::TICK);
+
         let mut p = Process::new().expect("failed to make process");
         p.context.pc = run_shell as *const () as *const u64 as u64;
         p.context.sp = p.stack.top().as_u64();
-        p.context.pstate |= 1 << 7; // SPSR_EL1::I; // disable IRQ exceptions
-        p.context.pstate &= !0b1100; // CurrentEL::EL ; // set current EL to 0
+        p.context.pstate |= 1 << 7; // enable IRQ exceptions
+        p.context.pstate &= !0b1100; // set current EL to 0
 
         let frame_addr = p.context.as_ref() as *const TrapFrame as *const u64 as u64;
 
@@ -197,9 +213,27 @@ pub extern "C" fn test_user_process() -> ! {
 use crate::shell;
 use aarch64::current_el;
 extern "C" fn run_shell() {
-    unsafe { asm!("brk 1"); }
-    unsafe { asm!("brk 2"); }
-    shell::shell("user0> ");
+    // unsafe { asm!("brk 1"); }
+    // unsafe { asm!("brk 2"); }
+
+    // won't work until we enable increasing levels
+    // let mut value: u64;
+    // unsafe {
+    //     asm!(
+    //         "mrs {value}, DAIF",
+    //         value = out(reg) value,
+    //     );
+    // }
+    // kprintln!("daif: {}", value);
+
+
+    // shell::shell("user0> ");
     unsafe { asm!("brk 3"); }
     loop { shell::shell("user1> "); }
+}
+
+
+fn timer_handler(tf : &mut TrapFrame) {
+    kprintln!("got timer interrupted with tf {:#?}", tf);
+    timer::tick_in(crate::param::TICK);
 }

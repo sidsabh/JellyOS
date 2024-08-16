@@ -1,3 +1,4 @@
+use aarch64::current_el;
 use fat32::traits::Entry;
 use fat32::traits::Metadata;
 use shim::io::Write;
@@ -249,9 +250,6 @@ pub fn shell(prefix: &str) {
                     }
                     Ok(command) if command.path() == "exit" => {
                         break 'exit;
-                    }
-                    Ok(command) if command.path() == "prefix" => {
-                        kprintln!("prefix {}", prefix);
                     }
                     Ok(command) => {
                         kprintln!("unknown command: {}", command.path());

@@ -57,6 +57,7 @@ fn kmain() -> ! {
     unsafe {
         ALLOCATOR.initialize();
         FILESYSTEM.initialize();
+        IRQ.initialize();
         SCHEDULER.start()
     }
 

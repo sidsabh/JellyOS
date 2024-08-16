@@ -1,8 +1,10 @@
 use crate::common::IO_BASE;
 
+use shim::const_assert_size;
 use volatile::prelude::*;
 use volatile::{Volatile, ReadVolatile};
 
+// "The base address for the ARM interrupt register is 0x7E00B000.""
 const INT_BASE: usize = IO_BASE + 0xB000 + 0x200;
 
 #[derive(Copy, Clone, PartialEq)]
@@ -22,7 +24,7 @@ impl Interrupt {
 
     pub fn iter() -> core::slice::Iter<'static, Interrupt> {
         use Interrupt::*;
-        [Timer1, Timer3, Usb, Gpio0, Gpio1, Gpio2, Gpio3, Uart].into_iter()
+        [Timer1, Timer3, Usb, Gpio0, Gpio1, Gpio2, Gpio3, Uart].iter()
     }
 
     pub fn to_index(i: Interrupt) -> usize {
@@ -76,8 +78,17 @@ impl From<usize> for Interrupt {
 #[repr(C)]
 #[allow(non_snake_case)]
 struct Registers {
-    // FIXME: Fill me in.
+    IRQ_BASIC_PENDING: ReadVolatile<u32>,   // 0x200 IRQ basic pending
+    IRQ_PENDING: [ReadVolatile<u32>; 2],       // 0x204 IRQ pending 1 // 0x208 IRQ pending 2
+    FIQ_CONTROL: Volatile<u32>,             // 0x20C FIQ control
+    ENABLE_IRQS: [Volatile<u32>; 2],           // 0x210 Enable IRQs 1 // 0x214 Enable IRQs 2
+    ENABLE_BASIC_IRQS: Volatile<u32>,       // 0x218 Enable Basic IRQs
+    DISABLE_IRQS: [Volatile<u32>; 2],          // 0x21C Disable IRQs 1 // 0x220 Disable IRQs 2
+    DISABLE_BASIC_IRQS: Volatile<u32>,      // 0x224 Disable Basic IRQs
 }
+
+const_assert_size!(Registers, 0x28);
+
 
 /// An interrupt controller. Used to enable and disable interrupts as well as to
 /// check if an interrupt is pending.
@@ -95,16 +106,19 @@ impl Controller {
 
     /// Enables the interrupt `int`.
     pub fn enable(&mut self, int: Interrupt) {
-        unimplemented!()
+        let idx = Interrupt::to_index(int);
+        self.registers.ENABLE_IRQS[idx / 32].or_mask(1 << (idx % 32));
     }
 
     /// Disables the interrupt `int`.
     pub fn disable(&mut self, int: Interrupt) {
-        unimplemented!()
+        let idx = Interrupt::to_index(int);
+        self.registers.DISABLE_IRQS[idx / 32].or_mask(1 << (idx % 32));
     }
 
     /// Returns `true` if `int` is pending. Otherwise, returns `false`.
     pub fn is_pending(&self, int: Interrupt) -> bool {
-        unimplemented!()
+        let idx: usize = Interrupt::to_index(int);
+        self.registers.IRQ_PENDING[idx / 32].has_mask(1 << (idx % 32))
     }
 }
