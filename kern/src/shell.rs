@@ -261,19 +261,12 @@ pub fn shell(prefix: &str) {
                         break 'exit;
                     }
                     Ok(command) if command.path() == "sleep" => {
-                        use core::arch::asm;
+                        use crate::Duration;
                         if command.args.len() == 2
-                            && let Some(ms) = command.args.last().and_then(|v| v.parse::<u32>().ok())
+                            && let Some(ms) =
+                                command.args.last().and_then(|v| v.parse::<u32>().ok())
                         {
-                            kprintln!("sleep {}", ms);
-                            unsafe {
-                                asm!(
-                                    "mov w0, {sleep_ms:w}",
-                                    "svc {sleep_syscall_num}",
-                                    sleep_syscall_num = const 1,
-                                    sleep_ms = in(reg) ms
-                                );
-                            }
+                            kernel_api::syscall::sleep(Duration::from_millis(ms as u64)).expect("sleep failed");
                         }
                     }
                     Ok(command) => {

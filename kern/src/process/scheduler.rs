@@ -126,7 +126,8 @@ impl GlobalScheduler {
         *self.0.lock() = Some(Scheduler::new());
 
         let mut p1 = Process::new().expect("failed to make process");
-        p1.context.pc = proc1 as *const () as *const u64 as u64;
+        p1.context.pc = test_user_process as *const () as *const u64 as u64;
+        // p1.context.pc = proc1 as *const () as *const u64 as u64;
         p1.context.sp = p1.stack.top().as_u64();
         p1.context.pstate |= 1 << 6; // enable IRQ exceptions
         p1.context.pstate &= !0b1100; // set current EL to 0
@@ -139,7 +140,7 @@ impl GlobalScheduler {
         p2.context.pstate |= 1 << 6; // enable IRQ exceptions
         p2.context.pstate &= !0b1100; // set current EL to 0
 
-        // self.add(p2);
+        self.add(p2);
     }
 
     // The following method may be useful for testing Phase 3:
@@ -276,6 +277,10 @@ pub extern "C" fn test_user_process() -> ! {
         }
 
         // You might want to add some logic here to do something with `elapsed_ms` and `error`
+        kprintln!("error: {}", error);
+        kprintln!("elapsed_ms: {}", elapsed_ms);
+
+        loop {}
     }
 }
 
@@ -292,16 +297,16 @@ extern "C" fn idle_proc() {
 
 extern "C" fn proc1() {
     shell::shell("hi");
-    let mut ctr = 0;
+    let mut ctr: i32 = 0;
     loop {
         kprintln!("proc1 here with {}", ctr);
-        timer::spin_sleep(Duration::from_secs(1));
         ctr +=1;
     }
 }
 
 
 extern "C" fn proc2() {
+    let mut ctr: i32 = 0;
     loop {
         kprintln!("proc2 here");
         timer::spin_sleep(Duration::from_secs(1));

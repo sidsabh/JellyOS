@@ -6,6 +6,7 @@ use crate::process::State;
 use crate::traps::TrapFrame;
 use crate::SCHEDULER;
 use kernel_api::*;
+use pi::timer;
 
 /// Sleep for `ms` milliseconds.
 ///
@@ -15,7 +16,15 @@ use kernel_api::*;
 /// parameter: the approximate true elapsed time from when `sleep` was called to
 /// when `sleep` returned.
 pub fn sys_sleep(ms: u32, tf: &mut TrapFrame) {
-    unimplemented!("sys_sleep()");
+    let start = timer::current_time();
+    let desired_time = timer::current_time()+Duration::from_millis(ms as u64);
+    let boxed_fnmut = Box::new(move |_p: &mut crate::process::Process| {
+        timer::current_time() >= desired_time
+    });
+    SCHEDULER.switch(State::Waiting(boxed_fnmut), tf);
+
+    tf.regs[0] = (timer::current_time() - start).as_millis() as u64;
+    tf.regs[7] = 1;
 }
 
 /// Returns current time.
