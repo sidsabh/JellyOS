@@ -45,6 +45,10 @@ use crate::{shell, IRQ};
 #[no_mangle]
 pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
     match info.kind {
+        Kind::Synchronous if let Syndrome::Svc(num) =  Syndrome::from(esr) => {
+            kprintln!("tf: {:#?}", tf);
+            handle_syscall(num, tf);
+        },
         Kind::Synchronous => {
             kprintln!("{:#?}, {}, {:#?}", info, esr, Syndrome::from(esr));
             // Preferred Exception Return Address for synchronous

@@ -58,5 +58,13 @@ pub fn sys_getpid(tf: &mut TrapFrame) {
 
 pub fn handle_syscall(num: u16, tf: &mut TrapFrame) {
     use crate::console::kprintln;
-    unimplemented!("handle_syscall()")
+    match num {
+        1 => {
+            kprintln!("{}", tf.regs[0]);
+            sys_sleep(tf.regs[0] as u32, tf);
+        }
+        _ => {
+            panic!("unimplemented syscall");
+        }
+    }
 }

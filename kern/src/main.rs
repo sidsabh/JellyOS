@@ -14,6 +14,8 @@
 #![feature(let_chains)]
 #![feature(asm_const)]
 
+#![feature(if_let_guard)] // experimental
+
 // #[cfg(not(test))] // commenting for rust-analyzer
 mod init;
 
@@ -28,8 +30,6 @@ pub mod param;
 pub mod process;
 pub mod traps;
 pub mod vm;
-
-
 
 use shell::shell;
 
@@ -59,20 +59,14 @@ fn kmain() -> ! {
         FILESYSTEM.initialize();
         IRQ.initialize();
         SCHEDULER.initialize();
-        SCHEDULER.start();
     }
 
-    // unsafe {
-    //     use aarch64::current_el;
-    //     kprintln!("{}", current_el());
-    // }
-    // use core::arch::asm;
-    // unsafe {
-    //     asm!("brk 2");
-    // }
+    // shell(">");
 
-    // loop {
-    //     shell(">");
-    // }
+    unsafe {
+    //     use aarch64::current_el;
+    //     kprintln!("el{}", current_el());
+        SCHEDULER.start();
+    }
 }
 

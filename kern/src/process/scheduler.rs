@@ -102,7 +102,6 @@ impl GlobalScheduler {
         p.context.sp = p.stack.top().as_u64();
         p.context.pstate |= 1 << 6; // enable IRQ exceptions
         p.context.pstate |= 0b0100; // set current EL to 0
-        p.context.tpidr = 42;
 
         let frame_addr = p.context.as_ref() as *const TrapFrame as *const u64 as u64;
 
@@ -140,7 +139,7 @@ impl GlobalScheduler {
         p2.context.pstate |= 1 << 6; // enable IRQ exceptions
         p2.context.pstate &= !0b1100; // set current EL to 0
 
-        self.add(p2);
+        // self.add(p2);
     }
 
     // The following method may be useful for testing Phase 3:
@@ -292,9 +291,12 @@ extern "C" fn idle_proc() {
 
 
 extern "C" fn proc1() {
+    shell::shell("hi");
+    let mut ctr = 0;
     loop {
-        kprintln!("proc1 here");
+        kprintln!("proc1 here with {}", ctr);
         timer::spin_sleep(Duration::from_secs(1));
+        ctr +=1;
     }
 }
 

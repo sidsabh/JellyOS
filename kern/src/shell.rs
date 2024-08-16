@@ -202,7 +202,10 @@ pub fn shell(prefix: &str) {
                             {
                                 Some(new_dir)
                             } else {
-                                kprintln!("error: dir {} not found", path.display().to_string().to_uppercase());
+                                kprintln!(
+                                    "error: dir {} not found",
+                                    path.display().to_string().to_uppercase()
+                                );
                                 None
                             }
                         } else {
@@ -233,7 +236,10 @@ pub fn shell(prefix: &str) {
                         {
                             pwd_dir = new_dir;
                         } else {
-                            kprintln!("error: dir {} not found", path.display().to_string().to_uppercase());
+                            kprintln!(
+                                "error: dir {} not found",
+                                path.display().to_string().to_uppercase()
+                            );
                         }
                     }
                     Ok(command) if command.path() == "cat" => {
@@ -244,12 +250,31 @@ pub fn shell(prefix: &str) {
                             {
                                 kprintln!("{}", entry);
                             } else {
-                                kprintln!("error: file {} not found", path.display().to_string().to_uppercase());
+                                kprintln!(
+                                    "error: file {} not found",
+                                    path.display().to_string().to_uppercase()
+                                );
                             }
                         }
                     }
                     Ok(command) if command.path() == "exit" => {
                         break 'exit;
+                    }
+                    Ok(command) if command.path() == "sleep" => {
+                        use core::arch::asm;
+                        if command.args.len() == 2
+                            && let Some(ms) = command.args.last().and_then(|v| v.parse::<u32>().ok())
+                        {
+                            kprintln!("sleep {}", ms);
+                            unsafe {
+                                asm!(
+                                    "mov w0, {sleep_ms:w}",
+                                    "svc {sleep_syscall_num}",
+                                    sleep_syscall_num = const 1,
+                                    sleep_ms = in(reg) ms
+                                );
+                            }
+                        }
                     }
                     Ok(command) => {
                         kprintln!("unknown command: {}", command.path());

@@ -9,7 +9,7 @@ pub struct TrapFrame {
     pub sp : u64,
     pub tpidr : u64,
     big_regs : [u128; 32],
-    regs : [u64; 31],
+    pub regs : [u64; 31],
     reserved : u64
 }
 
