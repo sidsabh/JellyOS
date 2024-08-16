@@ -1,5 +1,6 @@
 use alloc::boxed::Box;
 use alloc::collections::vec_deque::VecDeque;
+use core::borrow::Borrow;
 use core::fmt;
 use core::ops::{BitAnd, BitOr};
 
@@ -133,14 +134,17 @@ impl GlobalScheduler {
 
 #[derive(Debug)]
 pub struct Scheduler {
-    processes: VecDeque<Process>,
+    processes: VecDeque<Process>, // queue
     last_id: Option<Id>,
 }
 
 impl Scheduler {
     /// Returns a new `Scheduler` with an empty queue.
     fn new() -> Scheduler {
-        unimplemented!("Scheduler::new()")
+        Scheduler {
+            processes: VecDeque::new(),
+            last_id: None,
+        }
     }
 
     /// Adds a process to the scheduler's queue and returns that process's ID if
@@ -151,7 +155,18 @@ impl Scheduler {
     /// It is the caller's responsibility to ensure that the first time `switch`
     /// is called, that process is executing on the CPU.
     fn add(&mut self, mut process: Process) -> Option<Id> {
-        unimplemented!("Scheduler::add()")
+        let new_id = if let Some(id) = self.last_id {
+            id + 1
+        } else {
+            0
+        };
+
+        process.context.tpidr = new_id;
+        self.processes.push_back(process);
+
+        let res = Some(new_id);
+        self.last_id = res;
+        res
     }
 
     /// Finds the currently running process, sets the current process's state
@@ -162,7 +177,16 @@ impl Scheduler {
     /// If the `processes` queue is empty or there is no current process,
     /// returns `false`. Otherwise, returns `true`.
     fn schedule_out(&mut self, new_state: State, tf: &mut TrapFrame) -> bool {
-        unimplemented!("Scheduler::schedule_out()")
+        for (i, p) in self.processes.iter_mut().enumerate() {
+            if let State::Running = p.state && p.context.tpidr == tf.tpidr {
+                p.state = new_state;
+                p.context = Box::new(*tf);
+                let rproc = self.processes.remove(i).unwrap();
+                self.processes.push_back(rproc);
+                return true;
+            }
+        }
+        false
     }
 
     /// Finds the next process to switch to, brings the next process to the
@@ -173,7 +197,34 @@ impl Scheduler {
     /// If there is no process to switch to, returns `None`. Otherwise, returns
     /// `Some` of the next process`s process ID.
     fn switch_to(&mut self, tf: &mut TrapFrame) -> Option<Id> {
-        unimplemented!("Scheduler::switch_to()")
+
+        for (i, p) in self.processes.iter_mut().enumerate() {
+            if p.is_ready() {
+                p.state = State::Running;    
+                let rproc = self.processes.remove(i).unwrap();
+
+                let tid = rproc.context.tpidr;
+                let next_tf = rproc.context.as_ref() as *const TrapFrame as *const u64 as u64;
+                let curr_tf = tf as *const TrapFrame as *const u64 as u64;
+
+                self.processes.push_front(rproc);
+
+                // context switch
+                unsafe {
+                    asm!(
+                        "mov SP, {save_context:x}",
+                        "bl context_save",
+                        "mov SP, {restore_context:x}",
+                        "bl context_restore",
+                        save_context = in(reg) curr_tf,
+                        restore_context = in(reg) next_tf
+                    );
+                }
+
+                return Some(tid);
+            }
+        }
+        None
     }
 
     /// Kills currently running process by scheduling out the current process

@@ -44,22 +44,24 @@ use crate::{shell, IRQ};
 /// the trap frame for the exception.
 #[no_mangle]
 pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
-
-    if info.kind == Kind::Synchronous {
-        kprintln!("{:#?}, {}, {:#?}", info, esr, Syndrome::from(esr));
-        // Preferred Exception Return Address for synchronous
-        // is the address of instr that generated exception
-        tf.pc += 4;
-    }
-
-    if info.kind == Kind::Irq {
-        let controller = Controller::new();
-        for i in Interrupt::iter() {
-            if controller.is_pending(*i) {
-                kprintln!("{:#?}, idx:{:#?} ", info, Interrupt::to_index(*i));
-                IRQ.invoke(*i, tf);
-                break;
+    match info.kind {
+        Kind::Synchronous => {
+            kprintln!("{:#?}, {}, {:#?}", info, esr, Syndrome::from(esr));
+            // Preferred Exception Return Address for synchronous
+            // is the address of instr that generated exception
+            tf.pc += 4;
+        }
+        Kind::Irq => {
+            let controller = Controller::new();
+            for i in Interrupt::iter() {
+                if controller.is_pending(*i) {
+                    kprintln!("{:#?}, idx:{:#?} ", info, Interrupt::to_index(*i));
+                    IRQ.invoke(*i, tf);
+                    break;
+                }
             }
         }
+        Kind::Fiq => {},
+        Kind::SError => {},
     }
 }

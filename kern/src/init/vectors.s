@@ -1,3 +1,19 @@
+.global vec_context_save
+vec_context_save:
+    
+    mov x28, lr
+    
+    bl vec_context_save    
+
+    mov x0, x29 // info
+    mrs x1, ESR_EL1 // esr
+    mov x2, SP // tf
+
+    bl handle_exception
+
+    mov lr, x28
+    b context_restore // teleport
+
 .global context_save
 context_save:
 
@@ -41,15 +57,8 @@ context_save:
     mrs x1, SPSR_EL1
     stp x0, x1, [SP, #-16]!
 
-    mov x0, x29 // info
-    mrs x1, ESR_EL1 // esr
-    mov x2, SP // tf
+    ret
 
-    stp lr, xzr, [SP, #-16]! // save link register
-    bl handle_exception
-
-    ldp lr, xzr, [SP], #16
-    b context_restore // teleport
 
 .global context_restore
 context_restore:
@@ -104,7 +113,7 @@ context_restore:
     
     mov     x29, \source
     movk    x29, \kind, LSL #16
-    bl      context_save
+    bl      vec_context_save
     
     ldp     x28, x29, [SP], #16
     ldp     lr, xzr, [SP], #16
