@@ -106,19 +106,19 @@ impl Controller {
 
     /// Enables the interrupt `int`.
     pub fn enable(&mut self, int: Interrupt) {
-        let idx = Interrupt::to_index(int);
+        let idx = int as usize;
         self.registers.ENABLE_IRQS[idx / 32].or_mask(1 << (idx % 32));
     }
 
     /// Disables the interrupt `int`.
     pub fn disable(&mut self, int: Interrupt) {
-        let idx = Interrupt::to_index(int);
+        let idx = int as usize;
         self.registers.DISABLE_IRQS[idx / 32].or_mask(1 << (idx % 32));
     }
 
     /// Returns `true` if `int` is pending. Otherwise, returns `false`.
     pub fn is_pending(&self, int: Interrupt) -> bool {
-        let idx: usize = Interrupt::to_index(int);
+        let idx = int as usize;
         self.registers.IRQ_PENDING[idx / 32].has_mask(1 << (idx % 32))
     }
 }

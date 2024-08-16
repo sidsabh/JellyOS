@@ -60,6 +60,7 @@ pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
             if controller.is_pending(*i) {
                 kprintln!("{:#?}, idx:{:#?} ", info, Interrupt::to_index(*i));
                 IRQ.invoke(*i, tf);
+                break;
             }
         }
     }
