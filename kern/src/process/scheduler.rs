@@ -58,7 +58,7 @@ impl GlobalScheduler {
             if let Some(id) = rtn {
                 return id;
             }
-            aarch64::wfe();
+            aarch64::wfi();
         }
     }
 
@@ -101,7 +101,7 @@ impl GlobalScheduler {
         // p.context.pc = GlobalScheduler::switch_to as *const () as *const u64 as u64;
         p.context.sp = p.stack.top().as_u64();
         p.context.pstate |= 1 << 6; // enable IRQ exceptions
-        p.context.pstate |= 0b0100; // set current EL to 0
+        p.context.pstate &= !0b1100; // set current EL to 0
 
         let frame_addr = p.context.as_ref() as *const TrapFrame as *const u64 as u64;
 
@@ -126,21 +126,21 @@ impl GlobalScheduler {
         *self.0.lock() = Some(Scheduler::new());
 
         let mut p1 = Process::new().expect("failed to make process");
-        p1.context.pc = test_user_process as *const () as *const u64 as u64;
-        // p1.context.pc = proc1 as *const () as *const u64 as u64;
+        // p1.context.pc = test_user_process as *const () as *const u64 as u64;
+        p1.context.pc = proc1 as *const () as *const u64 as u64;
         p1.context.sp = p1.stack.top().as_u64();
         p1.context.pstate |= 1 << 6; // enable IRQ exceptions
         p1.context.pstate &= !0b1100; // set current EL to 0
 
         self.add(p1);
 
-        let mut p2 = Process::new().expect("failed to make process");
-        p2.context.pc = proc2 as *const () as *const u64 as u64;
-        p2.context.sp = p2.stack.top().as_u64();
-        p2.context.pstate |= 1 << 6; // enable IRQ exceptions
-        p2.context.pstate &= !0b1100; // set current EL to 0
+        // let mut p2 = Process::new().expect("failed to make process");
+        // p2.context.pc = proc2 as *const () as *const u64 as u64;
+        // p2.context.sp = p2.stack.top().as_u64();
+        // p2.context.pstate |= 1 << 6; // enable IRQ exceptions
+        // p2.context.pstate &= !0b1100; // set current EL to 0
 
-        self.add(p2);
+        // self.add(p2);
     }
 
     // The following method may be useful for testing Phase 3:
@@ -254,36 +254,6 @@ impl Scheduler {
 
 use core::arch::asm;
 
-pub extern "C" fn test_user_process() -> ! {
-    loop {
-        let ms = 10000;
-        let error: u64;
-        let elapsed_ms: u64;
-
-        unsafe {
-            asm!(
-                "mov x0, {ms:x}",
-                "svc {svc_num}",
-                "mov {ems}, x0",
-                "mov {error}, x7",
-                ms = in(reg) ms,
-                svc_num = const 1,
-                ems = out(reg) elapsed_ms,
-                error = out(reg) error,
-                out("x0") _,   // Clobbers x0
-                out("x7") _,   // Clobbers x7
-                options(nostack),
-            );
-        }
-
-        // You might want to add some logic here to do something with `elapsed_ms` and `error`
-        kprintln!("error: {}", error);
-        kprintln!("elapsed_ms: {}", elapsed_ms);
-
-        loop {}
-    }
-}
-
 use crate::shell;
 use aarch64::current_el;
 
@@ -296,19 +266,15 @@ extern "C" fn idle_proc() {
 
 
 extern "C" fn proc1() {
-    shell::shell("hi");
-    let mut ctr: i32 = 0;
-    loop {
-        kprintln!("proc1 here with {}", ctr);
-        ctr +=1;
-    }
+    shell::shell("tty0");
 }
 
 
 extern "C" fn proc2() {
     let mut ctr: i32 = 0;
     loop {
-        kprintln!("proc2 here");
+        kprintln!("proc2 here with {}", ctr);
+        ctr +=1;
         timer::spin_sleep(Duration::from_secs(1));
     }
 }

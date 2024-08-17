@@ -266,7 +266,7 @@ pub fn shell(prefix: &str) {
                             && let Some(ms) =
                                 command.args.last().and_then(|v| v.parse::<u32>().ok())
                         {
-                            kernel_api::syscall::sleep(Duration::from_millis(ms as u64)).expect("sleep failed");
+                            kprintln!("elapsed_ms:{}", kernel_api::syscall::sleep(Duration::from_millis(ms as u64)).expect("sleep failed").as_millis());
                         }
                     }
                     Ok(command) => {

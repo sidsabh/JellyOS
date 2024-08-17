@@ -49,6 +49,10 @@ vec_context_save:
     stp q2, q3, [SP, #-32]!
     stp q0, q1, [SP, #-32]!
 
+    mrs x0, TTBR0_EL1
+    mrs x1, TTBR1_EL1
+    stp x0, x1, [SP, #-16]!
+
     mrs x0, SP_EL0
     mrs x1, TPIDR_EL0
     stp x0, x1, [SP, #-16]!
@@ -70,6 +74,16 @@ vec_context_restore:
     ldp x0, x1, [SP], #16
     msr SP_EL0, x0
     msr TPIDR_EL0, x1
+
+    ldp x0, x1, [SP], #16
+    msr TTBR0_EL1, x0
+    msr TTBR1_EL1, x1
+
+    dsb     ishst
+    tlbi    vmalle1
+    dsb     ish
+    isb
+
 
     ldp q0, q1, [SP], #32
     ldp q2, q3, [SP], #32

@@ -57,16 +57,11 @@ fn kmain() -> ! {
     unsafe {
         ALLOCATOR.initialize();
         FILESYSTEM.initialize();
-        IRQ.initialize();
+        VMM.initialize();
         SCHEDULER.initialize();
     }
 
-    // shell(">");
-
-    unsafe {
-    //     use aarch64::current_el;
-    //     kprintln!("el{}", current_el());
-        SCHEDULER.start();
-    }
+    IRQ.initialize();
+    SCHEDULER.start()
 }
 

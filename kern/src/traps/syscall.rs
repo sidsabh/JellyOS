@@ -18,7 +18,7 @@ use pi::timer;
 pub fn sys_sleep(ms: u32, tf: &mut TrapFrame) {
     let start = timer::current_time();
     let desired_time = timer::current_time()+Duration::from_millis(ms as u64);
-    let boxed_fnmut = Box::new(move |_p: &mut crate::process::Process| {
+    let boxed_fnmut = Box::new(move |_: &mut crate::process::Process| {
         timer::current_time() >= desired_time
     });
     SCHEDULER.switch(State::Waiting(boxed_fnmut), tf);
@@ -69,7 +69,6 @@ pub fn handle_syscall(num: u16, tf: &mut TrapFrame) {
     use crate::console::kprintln;
     match num {
         1 => {
-            kprintln!("{}", tf.regs[0]);
             sys_sleep(tf.regs[0] as u32, tf);
         }
         _ => {

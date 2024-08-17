@@ -37,12 +37,14 @@ const_assert_size!(L2PageTable, PAGE_SIZE);
 impl L2PageTable {
     /// Returns a new `L2PageTable`
     fn new() -> L2PageTable {
-        unimplemented!("L2PageTable::new()")
+        L2PageTable {
+            entries: [RawL2Entry::new(0); 8192],
+        }
     }
 
     /// Returns a `PhysicalAddr` of the pagetable.
     pub fn as_ptr(&self) -> PhysicalAddr {
-        unimplemented!("L2PageTable::as_ptr()")
+        PhysicalAddr::from(&self.entries as *const [RawL2Entry] as *const u64 as u64)
     }
 }
 
@@ -52,18 +54,22 @@ pub struct L3Entry(RawL3Entry);
 impl L3Entry {
     /// Returns a new `L3Entry`.
     fn new() -> L3Entry {
-        unimplemented!("L3Entry::new()")
+        L3Entry(RawL3Entry::new(0))
     }
 
     /// Returns `true` if the L3Entry is valid and `false` otherwise.
     fn is_valid(&self) -> bool {
-        unimplemented!("L3Entry::is_valid()")
+        self.0.get_value(RawL3Entry::VALID) == 0x1
     }
 
     /// Extracts `ADDR` field of the L3Entry and returns as a `PhysicalAddr`
     /// if valid. Otherwise, return `None`.
     fn get_page_addr(&self) -> Option<PhysicalAddr> {
-        unimplemented!("LeEntry::get_page_add()")
+        if self.is_valid() {
+            Some(PhysicalAddr::from(self.0.get_value(RawL3Entry::ADDR) << 16))
+        } else {
+            None
+        }
     }
 }
 
@@ -77,12 +83,14 @@ const_assert_size!(L3PageTable, PAGE_SIZE);
 impl L3PageTable {
     /// Returns a new `L3PageTable`.
     fn new() -> L3PageTable {
-        unimplemented!("L3PageTable::new()")
+        L3PageTable {
+            entries: [L3Entry::new(); 8192],
+        }
     }
 
     /// Returns a `PhysicalAddr` of the pagetable.
     pub fn as_ptr(&self) -> PhysicalAddr {
-        unimplemented!("L3PageTable::as_ptr()")
+        PhysicalAddr::from(&self.entries as *const [L3Entry] as *const u64 as u64)
     }
 }
 
@@ -97,7 +105,17 @@ impl PageTable {
     /// Returns a new `Box` containing `PageTable`.
     /// Entries in L2PageTable should be initialized properly before return.
     fn new(perm: u64) -> Box<PageTable> {
-        unimplemented!("PageTable::new()")
+        let mut pt = PageTable {
+            l2: L2PageTable::new(),
+            l3: [L3PageTable::new(), L3PageTable::new()]
+        };
+
+        for (i, entry) in pt.l3.iter_mut().enumerate() {
+            pt.l2.entries[i].set_value(entry.as_ptr().as_u64(), RawL2Entry::ADDR);
+        }
+        Box::new(pt)
+
+        // TODO: fix me
     }
 
     /// Returns the (L2index, L3index) extracted from the given virtual address.
