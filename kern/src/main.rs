@@ -58,11 +58,11 @@ fn kmain() -> ! {
         ALLOCATOR.initialize();
         FILESYSTEM.initialize();
         VMM.initialize();
-        loop {
-            kprintln!("here");
-        }
         SCHEDULER.initialize();
     }
+
+    kprintln!("here");
+
 
 
     IRQ.initialize();

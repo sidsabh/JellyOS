@@ -115,7 +115,7 @@ impl PageTable {
 
         for (i, entry) in pt.l3.iter().enumerate() {
             pt.l2.entries[i].set_value(EntryValid::Valid, RawL2Entry::VALID);
-            pt.l2.entries[i].set_value(EntryType::Block, RawL2Entry::TYPE);
+            pt.l2.entries[i].set_value(EntryType::Table, RawL2Entry::TYPE);
             pt.l2.entries[i].set_value(EntryAttr::Mem, RawL2Entry::ATTR);
             pt.l2.entries[i].set_value(perm, RawL2Entry::AP);
             pt.l2.entries[i].set_value(EntrySh::ISh, RawL2Entry::SH);
@@ -307,7 +307,7 @@ impl UserPageTable {
         entry.set_value(PageType::Page, RawL3Entry::TYPE);
         entry.set_value(EntryAttr::Dev, RawL3Entry::ATTR);
         entry.set_value(EntryPerm::USER_RW, RawL3Entry::AP); // use _perm ?
-        entry.set_value(EntrySh::OSh, RawL3Entry::SH);
+        entry.set_value(EntrySh::ISh, RawL3Entry::SH);
         entry.set_masked(page as u64, RawL3Entry::ADDR);
 
         self.set_entry(adj_va, entry);

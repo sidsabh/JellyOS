@@ -93,7 +93,6 @@ impl GlobalScheduler {
         // set timer interupt
         timer::tick_in(crate::param::TICK);
 
-
         // run first
         // self.switch_to(&mut TrapFrame::default());
 
@@ -137,7 +136,6 @@ impl GlobalScheduler {
         self.test_phase_3(&mut p1);
 
         self.add(p1);
-        
 
         // let mut p2 = Process::new().expect("failed to make process");
         // p2.context.pc = proc2 as *const () as *const u64 as u64;
@@ -152,16 +150,15 @@ impl GlobalScheduler {
     //
     // * A method to load a extern function to the user process's page table.
     //
-    pub fn test_phase_3(&self, proc: &mut Process){
-        use crate::vm::{VirtualAddr, PagePerm};
-    
-        let mut page = proc.vmap.alloc(
-            VirtualAddr::from(USER_IMG_BASE as u64), PagePerm::RWX);
-    
-        let text = unsafe {
-            core::slice::from_raw_parts(test_user_process as *const u8, 24)
-        };
-    
+    pub fn test_phase_3(&self, proc: &mut Process) {
+        use crate::vm::{PagePerm, VirtualAddr};
+
+        let mut page = proc
+            .vmap
+            .alloc(VirtualAddr::from(USER_IMG_BASE as u64), PagePerm::RWX);
+
+        let text = unsafe { core::slice::from_raw_parts(test_user_process as *const u8, 24) };
+
         page[0..24].copy_from_slice(text);
     }
 }
@@ -229,7 +226,7 @@ impl Scheduler {
                 p.state = State::Running;
                 let rproc = self.processes.remove(i).unwrap();
                 let pid = rproc.context.tpidr;
-                
+
                 *tf = *rproc.context; // context switch bro
                 self.processes.push_front(rproc);
 
@@ -249,7 +246,7 @@ impl Scheduler {
                 p.state = State::Dead;
                 let rproc = self.processes.remove(i).unwrap();
                 let pid = rproc.context.tpidr;
-                drop(rproc);  // Explicitly drop the process instance
+                drop(rproc); // Explicitly drop the process instance
                 return Some(pid);
             }
         }
@@ -299,17 +296,15 @@ extern "C" fn idle_proc() {
     }
 }
 
-
 extern "C" fn proc1() {
     shell::shell("tty0");
 }
-
 
 extern "C" fn proc2() {
     let mut ctr: i32 = 0;
     loop {
         kprintln!("proc2 here with {}", ctr);
-        ctr +=1;
+        ctr += 1;
         timer::spin_sleep(Duration::from_secs(1));
     }
 }
