@@ -147,18 +147,18 @@ impl GlobalScheduler {
     //
     // * A method to load a extern function to the user process's page table.
     //
-    // pub fn test_phase_3(&self, proc: &mut Process){
-    //     use crate::vm::{VirtualAddr, PagePerm};
-    //
-    //     let mut page = proc.vmap.alloc(
-    //         VirtualAddr::from(USER_IMG_BASE as u64), PagePerm::RWX);
-    //
-    //     let text = unsafe {
-    //         core::slice::from_raw_parts(test_user_process as *const u8, 24)
-    //     };
-    //
-    //     page[0..24].copy_from_slice(text);
-    // }
+    pub fn test_phase_3(&self, proc: &mut Process){
+        use crate::vm::{VirtualAddr, PagePerm};
+    
+        let mut page = proc.vmap.alloc(
+            VirtualAddr::from(USER_IMG_BASE as u64), PagePerm::RWX);
+    
+        let text = unsafe {
+            core::slice::from_raw_parts(test_user_process as *const u8, 24)
+        };
+    
+        page[0..24].copy_from_slice(text);
+    }
 }
 
 #[derive(Debug)]
@@ -249,6 +249,36 @@ impl Scheduler {
             }
         }
         None
+    }
+}
+
+pub extern "C" fn test_user_process() -> ! {
+    loop {
+        let ms = 10000;
+        let error: u64;
+        let elapsed_ms: u64;
+
+        unsafe {
+            asm!(
+                "mov x0, {ms:x}",
+                "svc {svc_num}",
+                "mov {ems}, x0",
+                "mov {error}, x7",
+                ms = in(reg) ms,
+                svc_num = const 1,
+                ems = out(reg) elapsed_ms,
+                error = out(reg) error,
+                out("x0") _,   // Clobbers x0
+                out("x7") _,   // Clobbers x7
+                options(nostack),
+            );
+        }
+
+        // You might want to add some logic here to do something with `elapsed_ms` and `error`
+        if error != 1 {
+            panic!("Sleep error with code : {}", error);
+        }
+        kprintln!("finished test_user_proc; elapsed_ms: {}", elapsed_ms);
     }
 }
 

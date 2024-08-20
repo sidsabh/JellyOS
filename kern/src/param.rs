@@ -10,7 +10,7 @@ pub const PAGE_ALIGN: usize = 16;
 pub const PAGE_SIZE: usize = 64 * 1024;
 pub const PAGE_MASK: usize = !(PAGE_SIZE - 1);
 
-pub const USER_MASK_BITS: usize = 34;
+pub const USER_MASK_BITS: usize = 34; // set all top 34 bits, allow usage of bottom 30 (1gb)
 pub const KERNEL_MASK_BITS: usize = 32;
 
 pub const USER_IMG_BASE: usize = 0xffff_ffff_c000_0000;

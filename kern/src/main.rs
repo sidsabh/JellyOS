@@ -13,7 +13,7 @@
 #![feature(const_option)]
 #![feature(let_chains)]
 #![feature(asm_const)]
-
+#![feature(iter_chain)]
 #![feature(if_let_guard)] // experimental
 
 // #[cfg(not(test))] // commenting for rust-analyzer
