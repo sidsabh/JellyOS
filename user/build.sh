@@ -3,13 +3,14 @@
 IMG=fs.img
 MNT=mnt
 
-PROGS=(sleep fib)
+# PROGS=(sleep fib)
+PROGS=(sleep)
 
 for d in ${PROGS[@]}; do
     (cd $d; make build)
 done
 
-dd if=/dev/zero of=$IMG bs=1MB count=128
+dd if=/dev/zero of=$IMG bs=1m count=128
 echo -e "n\np\n1\n\n\nt\nc\nw\n" | fdisk $IMG
 
 LO=$(sudo losetup --show -f -P $IMG)

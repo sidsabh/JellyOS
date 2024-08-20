@@ -15,6 +15,7 @@
 #![feature(asm_const)]
 #![feature(iter_chain)]
 #![feature(if_let_guard)] // experimental
+#![feature(array_chunks)] // experimental
 
 // #[cfg(not(test))] // commenting for rust-analyzer
 mod init;
@@ -60,6 +61,7 @@ fn kmain() -> ! {
         VMM.initialize();
         SCHEDULER.initialize();
     }
+
     IRQ.initialize();
     SCHEDULER.start();
 }

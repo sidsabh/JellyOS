@@ -278,7 +278,7 @@ impl UserPageTable {
     /// TODO. use perm properly
     pub fn alloc(&mut self, va: VirtualAddr, _perm: PagePerm) -> &mut [u8] {
         if va.as_usize() < USER_IMG_BASE {
-            panic!("virtual address is lower than `USER_IMG_BASE`");
+            panic!("virtual address {} is lower than `USER_IMG_BASE`", va.as_usize());
         }
 
         use core::ops::Sub;

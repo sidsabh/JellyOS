@@ -45,6 +45,29 @@ pub mod EntryAttr {
     pub const Nc: u64 = 0b010;
 }
 
+defbit!(PState, [
+    N    [31-31], // Negative Condition flag
+    Z    [30-30], // Zero Condition flag
+    C    [29-29], // Carry Condition flag
+    V    [28-28], // Overflow Condition flag
+    TCO  [25-25], // Tag Check Override
+    DIT  [24-24], // Data Independent Timing
+    UAO  [23-23], // User Access Override
+    PAN  [22-22], // Privileged Access Never
+    SS   [21-21], // Software Step
+    IL   [20-20], // Illegal Execution state
+    SSBS [12-12], // Speculative Store Bypass
+    BTYPE[11-10], // Branch Type Indicator
+    D    [09-09], // Debug exception mask
+    A    [08-08], // SError interrupt mask
+    I    [07-07], // IRQ interrupt mask
+    F    [06-06], // FIQ interrupt mask
+    M4   [04-04], // Execution state
+    M    [03-00], // AArch64 Exception level and selected Stack Pointer
+
+    RES0 [63-32|27-26|19-13|05-05],
+]);
+
 defbit!(RawL2Entry, [
     ADDR  [47-16],
 

@@ -1,5 +1,6 @@
 mod linked_list;
 mod util;
+pub use self::util::{align_down, align_up};
 
 mod bin;
 mod bump;
@@ -75,7 +76,6 @@ extern "C" {
     static __text_end: u8;
 }
 
-use crate::allocator::util::align_up;
 /// Returns the (start address, end address) of the available memory on this
 /// system if it can be determined. If it cannot, `None` is returned.
 ///

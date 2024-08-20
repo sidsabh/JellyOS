@@ -1,5 +1,6 @@
 use alloc::boxed::Box;
 use alloc::collections::vec_deque::VecDeque;
+use shim::path::Path;
 use core::borrow::Borrow;
 use core::fmt;
 use core::ops::{BitAnd, BitOr};
@@ -7,6 +8,7 @@ use core::time::Duration;
 
 use aarch64::*;
 
+use crate::allocator::align_down;
 use crate::console::kprintln;
 use crate::mutex::Mutex;
 use crate::param::{PAGE_MASK, PAGE_SIZE, TICK, USER_IMG_BASE};
@@ -111,15 +113,17 @@ impl GlobalScheduler {
         self.test_phase_3(&mut p, idle_proc as *const u8);
 
         let frame_addr = p.context.as_ref() as *const TrapFrame as *const u64 as u64;
+        
         unsafe {
             asm!(
                 "mov SP, {context:x}",
                 "bl vec_context_restore",
                 "adr x0, _start",
-                "mov SP, x0",
+                "add SP, x0, {page_size}",
                 "mov x0, xzr",
                 "mov x1, {context:x}",
                 "eret",
+                page_size = in(reg) PAGE_SIZE,
                 context = in(reg) frame_addr,
             );
         }
@@ -130,28 +134,9 @@ impl GlobalScheduler {
     pub unsafe fn initialize(&self) {
         *self.0.lock() = Some(Scheduler::new());
 
-        let mut p1 = Process::new().expect("failed to make process");
-        // p1.context.pc = test_user_process as *const () as *const u64 as u64;
-        p1.context.pc = USER_IMG_BASE as *const () as *const u64 as u64;
-        p1.context.sp = p1.stack.top().as_u64();
-        p1.context.pstate |= 1 << 6; // enable IRQ exceptions
-        p1.context.pstate &= !0b1100; // set current EL to 0
-        p1.context.ttbr0_el1 = VMM.get_baddr().as_u64();
-        p1.context.ttbr1_el1 = p1.vmap.get_baddr().as_u64();
-        self.test_phase_3(&mut p1, test_user_process as *const u8);
-
-        self.add(p1);
-
-        let mut p2 = Process::new().expect("failed to make process");
-        p2.context.pc = USER_IMG_BASE as *const () as *const u64 as u64;
-        p2.context.sp = p2.stack.top().as_u64();
-        p2.context.pstate |= 1 << 6; // enable IRQ exceptions
-        p2.context.pstate &= !0b1100; // set current EL to 0
-        p2.context.ttbr0_el1 = VMM.get_baddr().as_u64();
-        p2.context.ttbr1_el1 = p2.vmap.get_baddr().as_u64();
-        self.test_phase_3(&mut p2, idle_proc as *const u8);
-
-        self.add(p2);
+        for _ in 0..4 {
+            self.add(Process::load(Path::new("/programs/sleep.bin")).expect("failed to load sleep proc"));
+        }
     }
 
     // The following method may be useful for testing Phase 3:
