@@ -4,6 +4,7 @@ use shim::path::Path;
 
 use aarch64;
 
+use crate::console::kprintln;
 use crate::param::*;
 use crate::process::{Stack, State};
 use crate::traps::TrapFrame;
@@ -21,7 +22,7 @@ pub struct Process {
     /// The memory allocation used for the process's stack.
     pub stack: Stack,
     /// The page table describing the Virtual Memory of the process
-    // pub vmap: Box<UserPageTable>,
+    pub vmap: Box<UserPageTable>,
     /// The scheduling state of the process.
     pub state: State,
 }
@@ -33,13 +34,18 @@ impl Process {
     /// If enough memory could not be allocated to start the process, returns
     /// `None`. Otherwise returns `Some` of the new `Process`.
     pub fn new() -> OsResult<Process> {
-        let tf = Box::new(TrapFrame::default());
+        let context = Box::new(TrapFrame::default());
         let stack = Stack::new().ok_or(OsError::NoMemory)?;
         let state = State::Ready;
 
+        let kpt = UserPageTable::new();
+        
+        let vmap = Box::new(kpt);
+
         let p = Process {
-            context: tf,
+            context,
             stack,
+            vmap,
             state
         };
 

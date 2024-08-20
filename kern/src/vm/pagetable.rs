@@ -7,6 +7,7 @@ use alloc::fmt;
 use core::alloc::{GlobalAlloc, Layout};
 
 use crate::allocator::{self, memory_map, Allocator};
+use crate::console::kprint;
 use crate::param::*;
 use crate::vm::{PhysicalAddr, VirtualAddr};
 use crate::ALLOCATOR;
@@ -105,19 +106,20 @@ impl PageTable {
     /// Returns a new `Box` containing `PageTable`.
     /// Entries in L2PageTable should be initialized properly before return.
     fn new(perm: u64) -> Box<PageTable> {
+        
+
         let mut pt = PageTable {
             l2: L2PageTable::new(),
             l3: [L3PageTable::new(), L3PageTable::new()],
         };
 
-        for (i, entry) in pt.l3.iter_mut().enumerate() {
+        for (i, entry) in pt.l3.iter().enumerate() {
             pt.l2.entries[i].set_value(EntryValid::Valid, RawL2Entry::VALID);
-            // type=1 gives the address of the next level of translation table, and some attributes for that translation
             pt.l2.entries[i].set_value(EntryType::Table, RawL2Entry::TYPE);
             pt.l2.entries[i].set_value(EntryAttr::Mem, RawL2Entry::ATTR);
             pt.l2.entries[i].set_value(perm, RawL2Entry::AP);
             pt.l2.entries[i].set_value(EntrySh::ISh, RawL2Entry::SH);
-            pt.l2.entries[i].set_value(entry.as_ptr().as_u64(), RawL2Entry::ADDR);
+            // pt.l2.entries[i].set_value(entry.as_ptr().as_u64(), RawL2Entry::ADDR);
         }
 
         Box::new(pt)
@@ -214,9 +216,8 @@ impl KernPageTable {
             .flat_map(|l3_table| l3_table.entries.iter_mut())
             .collect();
 
-        let mut idx = start / PAGE_SIZE;
         // identity map physical memory
-        for addr in (start..end).step_by(PAGE_SIZE) {
+        for (idx, addr) in (start..end).step_by(PAGE_SIZE).enumerate() {
             let mut entry = RawL3Entry::new(0);
             entry.set_value(EntryValid::Valid, RawL3Entry::VALID);
             entry.set_value(PageType::Page, RawL3Entry::TYPE);
@@ -226,12 +227,10 @@ impl KernPageTable {
             entry.set_value(addr as u64, RawL3Entry::ADDR);
 
             *entries[idx] = L3Entry(entry);
-            idx += 1;
         }
 
         // identity map mmio
-        idx = IO_BASE / PAGE_SIZE;
-        for addr in (IO_BASE..IO_BASE_END).step_by(PAGE_SIZE) {
+        for (idx, addr) in (IO_BASE..IO_BASE_END).step_by(PAGE_SIZE).enumerate() {
             let mut entry = RawL3Entry::new(0);
             entry.set_value(EntryValid::Valid, RawL3Entry::VALID);
             entry.set_value(PageType::Page, RawL3Entry::TYPE);
@@ -240,8 +239,7 @@ impl KernPageTable {
             entry.set_value(EntrySh::OSh, RawL3Entry::SH);
             entry.set_value(addr as u64, RawL3Entry::ADDR);
 
-            *entries[idx] = L3Entry(entry);
-            idx += 1;
+            *entries[idx + IO_BASE / PAGE_SIZE] = L3Entry(entry);
         }
 
         kpt
@@ -254,12 +252,14 @@ pub enum PagePerm {
     RWX,
 }
 
+#[derive(Debug)]
 pub struct UserPageTable(Box<PageTable>);
 
 impl UserPageTable {
     /// Returns a new `UserPageTable` containing a `PageTable` created with
     /// `USER_RW` permission.
     pub fn new() -> UserPageTable {
+        
         UserPageTable(PageTable::new(EntryPerm::USER_RW))
     }
 
@@ -274,31 +274,40 @@ impl UserPageTable {
     /// TODO. use Result<T> and make it failurable
     /// TODO. use perm properly
     pub fn alloc(&mut self, va: VirtualAddr, _perm: PagePerm) -> &mut [u8] {
-        
         if va.as_usize() < USER_IMG_BASE {
             panic!("virtual address is lower than `USER_IMG_BASE`");
-        } 
-        
-        va.sub_assign(USER_IMG_BASE);
-        if self.is_valid(va) {
+        }
+
+        use core::ops::Sub;
+        let adj_va = va.sub(VirtualAddr::from(USER_IMG_BASE)); // normalize
+
+        if self.is_valid(adj_va) {
             panic!("virtual address has already been allocated");
         }
 
-        let page = unsafe {
-            ALLOCATOR.alloc(Page::layout())
+        use core::slice;
+        let page: *mut u8;
+        let page_slice: &mut [u8];
+        unsafe {
+            page = ALLOCATOR.alloc(Page::layout());
+            page_slice = slice::from_raw_parts_mut(page, Page::SIZE);
         };
+
         if page == core::ptr::null_mut() {
             panic!("allocator failed to allocate a page")
-        }
-
-
-
-
-
-        let page = unsafe {
-            ALLOCATOR.alloc(Page::layout())
         };
 
+        let mut entry = RawL3Entry::new(0);
+        entry.set_value(EntryValid::Valid, RawL3Entry::VALID);
+        entry.set_value(PageType::Page, RawL3Entry::TYPE);
+        entry.set_value(EntryAttr::Dev, RawL3Entry::ATTR);
+        entry.set_value(EntryPerm::USER_RW, RawL3Entry::AP); // use _perm ?
+        entry.set_value(EntrySh::OSh, RawL3Entry::SH);
+        entry.set_value(page as u64, RawL3Entry::ADDR);
+
+        self.set_entry(adj_va, entry);
+
+        page_slice
     }
 }
 
@@ -330,5 +339,40 @@ impl DerefMut for UserPageTable {
     }
 }
 
-// FIXME: Implement `Drop` for `UserPageTable`.
-// FIXME: Implement `fmt::Debug` as you need.
+impl Drop for UserPageTable {
+    fn drop(&mut self) {
+        for entry in self.into_iter() {
+            if entry.is_valid() {
+                let ptr = entry.0.get_masked(RawL3Entry::ADDR) as *mut u8;
+                unsafe {
+                    ALLOCATOR.dealloc(ptr, Page::layout());
+                }
+            }
+        }
+    }
+}
+
+impl fmt::Debug for L2PageTable {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("L2PageTable")
+            .field("entries", &self.entries)
+            .finish()
+    }
+}
+
+impl fmt::Debug for L3PageTable {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("L3PageTable")
+            .field("entries", &self.entries.map(|e|e.0))
+            .finish()
+    }
+}
+
+impl fmt::Debug for PageTable {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("PageTable")
+            .field("l2", &self.l2)
+            .field("l3", &self.l3)
+            .finish()
+    }
+}

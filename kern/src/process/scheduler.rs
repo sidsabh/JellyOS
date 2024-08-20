@@ -133,6 +133,7 @@ impl GlobalScheduler {
         p1.context.pstate &= !0b1100; // set current EL to 0
 
         self.add(p1);
+        
 
         // let mut p2 = Process::new().expect("failed to make process");
         // p2.context.pc = proc2 as *const () as *const u64 as u64;
@@ -147,18 +148,18 @@ impl GlobalScheduler {
     //
     // * A method to load a extern function to the user process's page table.
     //
-    pub fn test_phase_3(&self, proc: &mut Process){
-        use crate::vm::{VirtualAddr, PagePerm};
+    // pub fn test_phase_3(&self, proc: &mut Process){
+    //     use crate::vm::{VirtualAddr, PagePerm};
     
-        let mut page = proc.vmap.alloc(
-            VirtualAddr::from(USER_IMG_BASE as u64), PagePerm::RWX);
+    //     let mut page = proc.vmap.alloc(
+    //         VirtualAddr::from(USER_IMG_BASE as u64), PagePerm::RWX);
     
-        let text = unsafe {
-            core::slice::from_raw_parts(test_user_process as *const u8, 24)
-        };
+    //     let text = unsafe {
+    //         core::slice::from_raw_parts(test_user_process as *const u8, 24)
+    //     };
     
-        page[0..24].copy_from_slice(text);
-    }
+    //     page[0..24].copy_from_slice(text);
+    // }
 }
 
 #[derive(Debug)]
