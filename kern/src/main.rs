@@ -57,12 +57,17 @@ fn kmain() -> ! {
     unsafe {
         ALLOCATOR.initialize();
         FILESYSTEM.initialize();
-        // VMM.initialize();
+        VMM.initialize();
+        loop {
+            kprintln!("here");
+        }
         SCHEDULER.initialize();
     }
 
 
     IRQ.initialize();
+
+
     SCHEDULER.start();
 }
 

@@ -7,7 +7,7 @@ use alloc::fmt;
 use core::alloc::{GlobalAlloc, Layout};
 
 use crate::allocator::{self, memory_map, Allocator};
-use crate::console::kprint;
+use crate::console::{kprint, kprintln};
 use crate::param::*;
 use crate::vm::{PhysicalAddr, VirtualAddr};
 use crate::ALLOCATOR;
@@ -108,21 +108,24 @@ impl PageTable {
     fn new(perm: u64) -> Box<PageTable> {
         
 
-        let mut pt = PageTable {
+        let mut pt = Box::new(PageTable {
             l2: L2PageTable::new(),
             l3: [L3PageTable::new(), L3PageTable::new()],
-        };
+        });
 
         for (i, entry) in pt.l3.iter().enumerate() {
             pt.l2.entries[i].set_value(EntryValid::Valid, RawL2Entry::VALID);
-            pt.l2.entries[i].set_value(EntryType::Table, RawL2Entry::TYPE);
+            pt.l2.entries[i].set_value(EntryType::Block, RawL2Entry::TYPE);
             pt.l2.entries[i].set_value(EntryAttr::Mem, RawL2Entry::ATTR);
             pt.l2.entries[i].set_value(perm, RawL2Entry::AP);
             pt.l2.entries[i].set_value(EntrySh::ISh, RawL2Entry::SH);
-            // pt.l2.entries[i].set_value(entry.as_ptr().as_u64(), RawL2Entry::ADDR);
+            pt.l2.entries[i].set_masked(entry.as_ptr().as_u64(), RawL2Entry::ADDR);
         }
 
-        Box::new(pt)
+        // kprintln!("{:#?}", pt);
+
+        pt
+
     }
 
     /// Returns the (L2index, L3index) extracted from the given virtual address.
@@ -224,7 +227,7 @@ impl KernPageTable {
             entry.set_value(EntryAttr::Mem, RawL3Entry::ATTR);
             entry.set_value(EntryPerm::KERN_RW, RawL3Entry::AP);
             entry.set_value(EntrySh::ISh, RawL3Entry::SH);
-            entry.set_value(addr as u64, RawL3Entry::ADDR);
+            entry.set_masked(addr as u64, RawL3Entry::ADDR);
 
             *entries[idx] = L3Entry(entry);
         }
@@ -237,10 +240,12 @@ impl KernPageTable {
             entry.set_value(EntryAttr::Dev, RawL3Entry::ATTR);
             entry.set_value(EntryPerm::KERN_RW, RawL3Entry::AP);
             entry.set_value(EntrySh::OSh, RawL3Entry::SH);
-            entry.set_value(addr as u64, RawL3Entry::ADDR);
+            entry.set_masked(addr as u64, RawL3Entry::ADDR);
 
             *entries[idx + IO_BASE / PAGE_SIZE] = L3Entry(entry);
         }
+
+        // kprintln!("{:#?}", kpt.0);
 
         kpt
     }
@@ -303,7 +308,7 @@ impl UserPageTable {
         entry.set_value(EntryAttr::Dev, RawL3Entry::ATTR);
         entry.set_value(EntryPerm::USER_RW, RawL3Entry::AP); // use _perm ?
         entry.set_value(EntrySh::OSh, RawL3Entry::SH);
-        entry.set_value(page as u64, RawL3Entry::ADDR);
+        entry.set_masked(page as u64, RawL3Entry::ADDR);
 
         self.set_entry(adj_va, entry);
 

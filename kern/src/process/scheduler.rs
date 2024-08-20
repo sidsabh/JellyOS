@@ -12,6 +12,7 @@ use crate::mutex::Mutex;
 use crate::param::{PAGE_MASK, PAGE_SIZE, TICK, USER_IMG_BASE};
 use crate::process::{Id, Process, State};
 use crate::traps::TrapFrame;
+use crate::vm::{UserPageTable, VMManager};
 use crate::{IRQ, VMM};
 
 use pi::interrupt;
@@ -127,10 +128,13 @@ impl GlobalScheduler {
 
         let mut p1 = Process::new().expect("failed to make process");
         // p1.context.pc = test_user_process as *const () as *const u64 as u64;
-        p1.context.pc = proc1 as *const () as *const u64 as u64;
+        p1.context.pc = USER_IMG_BASE as *const () as *const u64 as u64;
         p1.context.sp = p1.stack.top().as_u64();
         p1.context.pstate |= 1 << 6; // enable IRQ exceptions
         p1.context.pstate &= !0b1100; // set current EL to 0
+        p1.context.ttbr0_el1 = VMM.get_baddr().as_u64();
+        p1.context.ttbr1_el1 = p1.vmap.get_baddr().as_u64();
+        self.test_phase_3(&mut p1);
 
         self.add(p1);
         
@@ -148,18 +152,18 @@ impl GlobalScheduler {
     //
     // * A method to load a extern function to the user process's page table.
     //
-    // pub fn test_phase_3(&self, proc: &mut Process){
-    //     use crate::vm::{VirtualAddr, PagePerm};
+    pub fn test_phase_3(&self, proc: &mut Process){
+        use crate::vm::{VirtualAddr, PagePerm};
     
-    //     let mut page = proc.vmap.alloc(
-    //         VirtualAddr::from(USER_IMG_BASE as u64), PagePerm::RWX);
+        let mut page = proc.vmap.alloc(
+            VirtualAddr::from(USER_IMG_BASE as u64), PagePerm::RWX);
     
-    //     let text = unsafe {
-    //         core::slice::from_raw_parts(test_user_process as *const u8, 24)
-    //     };
+        let text = unsafe {
+            core::slice::from_raw_parts(test_user_process as *const u8, 24)
+        };
     
-    //     page[0..24].copy_from_slice(text);
-    // }
+        page[0..24].copy_from_slice(text);
+    }
 }
 
 #[derive(Debug)]
