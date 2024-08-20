@@ -60,14 +60,7 @@ fn kmain() -> ! {
         VMM.initialize();
         SCHEDULER.initialize();
     }
-
-    kprintln!("here");
-
-
-
     IRQ.initialize();
-
-
     SCHEDULER.start();
 }
 

@@ -80,6 +80,13 @@ impl GlobalScheduler {
                 // tf was the interrupted processes' trap frame
                 timer::tick_in(crate::param::TICK);
                 self.switch(State::Ready, tf);
+                kprintln!("interrupt");
+                let binding = self.0.lock();
+                let t = binding.as_ref().unwrap();
+                for p in &t.processes {
+                    kprintln!("{:#?}", p.state);
+                }
+                kprintln!("");
 
                 // if let Some(id) = self.kill(tf) {
                 //     kprintln!("{}", id);
@@ -94,17 +101,16 @@ impl GlobalScheduler {
         timer::tick_in(crate::param::TICK);
 
         // run first
-        // self.switch_to(&mut TrapFrame::default());
-
         let mut p = Process::new().expect("failed to make process");
-        p.context.pc = idle_proc as *const () as *const u64 as u64;
-        // p.context.pc = GlobalScheduler::switch_to as *const () as *const u64 as u64;
+        p.context.pc = USER_IMG_BASE as *const () as *const u64 as u64;
         p.context.sp = p.stack.top().as_u64();
         p.context.pstate |= 1 << 6; // enable IRQ exceptions
         p.context.pstate &= !0b1100; // set current EL to 0
+        p.context.ttbr0_el1 = VMM.get_baddr().as_u64();
+        p.context.ttbr1_el1 = p.vmap.get_baddr().as_u64();
+        self.test_phase_3(&mut p, idle_proc as *const u8);
 
         let frame_addr = p.context.as_ref() as *const TrapFrame as *const u64 as u64;
-
         unsafe {
             asm!(
                 "mov SP, {context:x}",
@@ -117,7 +123,6 @@ impl GlobalScheduler {
                 context = in(reg) frame_addr,
             );
         }
-
         loop {}
     }
 
@@ -133,33 +138,36 @@ impl GlobalScheduler {
         p1.context.pstate &= !0b1100; // set current EL to 0
         p1.context.ttbr0_el1 = VMM.get_baddr().as_u64();
         p1.context.ttbr1_el1 = p1.vmap.get_baddr().as_u64();
-        self.test_phase_3(&mut p1);
+        self.test_phase_3(&mut p1, test_user_process as *const u8);
 
         self.add(p1);
 
-        // let mut p2 = Process::new().expect("failed to make process");
-        // p2.context.pc = proc2 as *const () as *const u64 as u64;
-        // p2.context.sp = p2.stack.top().as_u64();
-        // p2.context.pstate |= 1 << 6; // enable IRQ exceptions
-        // p2.context.pstate &= !0b1100; // set current EL to 0
+        let mut p2 = Process::new().expect("failed to make process");
+        p2.context.pc = USER_IMG_BASE as *const () as *const u64 as u64;
+        p2.context.sp = p2.stack.top().as_u64();
+        p2.context.pstate |= 1 << 6; // enable IRQ exceptions
+        p2.context.pstate &= !0b1100; // set current EL to 0
+        p2.context.ttbr0_el1 = VMM.get_baddr().as_u64();
+        p2.context.ttbr1_el1 = p2.vmap.get_baddr().as_u64();
+        self.test_phase_3(&mut p2, idle_proc as *const u8);
 
-        // self.add(p2);
+        self.add(p2);
     }
 
     // The following method may be useful for testing Phase 3:
     //
     // * A method to load a extern function to the user process's page table.
     //
-    pub fn test_phase_3(&self, proc: &mut Process) {
+    pub fn test_phase_3(&self, proc: &mut Process, f : *const u8) {
         use crate::vm::{PagePerm, VirtualAddr};
 
         let mut page = proc
             .vmap
             .alloc(VirtualAddr::from(USER_IMG_BASE as u64), PagePerm::RWX);
 
-        let text = unsafe { core::slice::from_raw_parts(test_user_process as *const u8, 24) };
+        let text = unsafe { core::slice::from_raw_parts(f, 100) };
 
-        page[0..24].copy_from_slice(text);
+        page[0..100].copy_from_slice(text);
     }
 }
 
@@ -275,24 +283,17 @@ pub extern "C" fn test_user_process() -> ! {
                 options(nostack),
             );
         }
-
-        // You might want to add some logic here to do something with `elapsed_ms` and `error`
-        if error != 1 {
-            panic!("Sleep error with code : {}", error);
-        }
-        kprintln!("finished test_user_proc; elapsed_ms: {}", elapsed_ms);
     }
 }
 
 use core::arch::asm;
 
 use crate::shell;
-use aarch64::current_el;
 
 extern "C" fn idle_proc() {
     loop {
-        kprintln!("idle proc here");
-        timer::spin_sleep(Duration::from_secs(1));
+        // kprintln!("idle proc here");
+        // timer::spin_sleep(Duration::from_secs(1));
     }
 }
 

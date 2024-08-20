@@ -1,7 +1,7 @@
 use alloc::boxed::Box;
 use core::time::Duration;
 
-use crate::console::CONSOLE;
+use crate::console::{kprintln, CONSOLE};
 use crate::process::State;
 use crate::traps::TrapFrame;
 use crate::SCHEDULER;

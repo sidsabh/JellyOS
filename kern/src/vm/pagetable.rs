@@ -106,8 +106,6 @@ impl PageTable {
     /// Returns a new `Box` containing `PageTable`.
     /// Entries in L2PageTable should be initialized properly before return.
     fn new(perm: u64) -> Box<PageTable> {
-        
-
         let mut pt = Box::new(PageTable {
             l2: L2PageTable::new(),
             l3: [L3PageTable::new(), L3PageTable::new()],
@@ -119,13 +117,13 @@ impl PageTable {
             pt.l2.entries[i].set_value(EntryAttr::Mem, RawL2Entry::ATTR);
             pt.l2.entries[i].set_value(perm, RawL2Entry::AP);
             pt.l2.entries[i].set_value(EntrySh::ISh, RawL2Entry::SH);
-            pt.l2.entries[i].set_masked(entry.as_ptr().as_u64(), RawL2Entry::ADDR);
+            pt.l2.entries[i].set_value(0b1_u64, RawL2Entry::AF);
+            pt.l2.entries[i].set_value(entry.as_ptr().as_u64() >> PAGE_ALIGN, RawL2Entry::ADDR);
         }
-
+        
         // kprintln!("{:#?}", pt);
 
         pt
-
     }
 
     /// Returns the (L2index, L3index) extracted from the given virtual address.
@@ -227,6 +225,7 @@ impl KernPageTable {
             entry.set_value(EntryAttr::Mem, RawL3Entry::ATTR);
             entry.set_value(EntryPerm::KERN_RW, RawL3Entry::AP);
             entry.set_value(EntrySh::ISh, RawL3Entry::SH);
+            entry.set_value(0b1_u64, RawL3Entry::AF);
             entry.set_masked(addr as u64, RawL3Entry::ADDR);
 
             *entries[idx] = L3Entry(entry);
@@ -240,12 +239,12 @@ impl KernPageTable {
             entry.set_value(EntryAttr::Dev, RawL3Entry::ATTR);
             entry.set_value(EntryPerm::KERN_RW, RawL3Entry::AP);
             entry.set_value(EntrySh::OSh, RawL3Entry::SH);
+            entry.set_value(0b1_u64, RawL3Entry::AF);
             entry.set_masked(addr as u64, RawL3Entry::ADDR);
 
             *entries[idx + IO_BASE / PAGE_SIZE] = L3Entry(entry);
         }
 
-        // kprintln!("{:#?}", kpt.0);
 
         kpt
     }
@@ -264,7 +263,6 @@ impl UserPageTable {
     /// Returns a new `UserPageTable` containing a `PageTable` created with
     /// `USER_RW` permission.
     pub fn new() -> UserPageTable {
-        
         UserPageTable(PageTable::new(EntryPerm::USER_RW))
     }
 
@@ -302,12 +300,14 @@ impl UserPageTable {
             panic!("allocator failed to allocate a page")
         };
 
+
         let mut entry = RawL3Entry::new(0);
         entry.set_value(EntryValid::Valid, RawL3Entry::VALID);
         entry.set_value(PageType::Page, RawL3Entry::TYPE);
-        entry.set_value(EntryAttr::Dev, RawL3Entry::ATTR);
+        entry.set_value(EntryAttr::Mem, RawL3Entry::ATTR);
         entry.set_value(EntryPerm::USER_RW, RawL3Entry::AP); // use _perm ?
-        entry.set_value(EntrySh::ISh, RawL3Entry::SH);
+        entry.set_value(EntrySh::OSh, RawL3Entry::SH);
+        entry.set_value(0b1_u64, RawL3Entry::AF);
         entry.set_masked(page as u64, RawL3Entry::ADDR);
 
         self.set_entry(adj_va, entry);
@@ -368,7 +368,7 @@ impl fmt::Debug for L2PageTable {
 impl fmt::Debug for L3PageTable {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("L3PageTable")
-            .field("entries", &self.entries.map(|e|e.0))
+            .field("entries", &self.entries.map(|e| e.0))
             .finish()
     }
 }
