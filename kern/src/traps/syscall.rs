@@ -98,7 +98,6 @@ pub fn handle_syscall(num: u16, tf: &mut TrapFrame) {
             panic!("unimplemented syscall");
         }
     }
-    unimplemented!("sys_getpid()")
 }
 
 /// Creates a socket and saves the socket handle in the current process's

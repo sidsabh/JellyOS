@@ -19,14 +19,17 @@ PARTITION="${DEVICE}s1"
 
 sudo diskutil unmount $PARTITION
 
-# # Mount the partition
+# Mount the partition
 mkdir -p $MNT
-mount -t msdos $PARTITION $MNT
+sudo mount -t msdos $PARTITION $MNT
+    
+# Ensure cleanup on exit
+trap "sudo umount $MNT; rm -rf $MNT; hdiutil detach $(echo $DEVICE | head -n 1 | awk '{print $1}')" EXIT
 
-# Handle errors and clean up properly
-trap "umount $MNT; rm -rf $MNT; hdiutil detach $DEVICE" EXIT
+# Create the programs directory on the mounted partition
+mkdir -p $MNT/programs
 
+# Copy the binaries to the mounted partition
 for d in ${PROGS[@]}; do
-    (cd $d; make build)
-    cp $d/build/$d.bin $MNT/$d
+sudo cp $d/build/$d.bin $MNT/programs/$d.bin
 done
