@@ -16,9 +16,9 @@ fn fib(n: u64) -> u64 {
 }
 
 fn main() {
-    println!("Started...");
-
-    let rtn = fib(40);
-
-    println!("Ended: Result = {}", rtn);
+    loop {
+        println!("Started...");
+        let rtn = fib(40);
+        println!("Ended: Result = {}", rtn);
+    }
 }

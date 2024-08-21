@@ -81,14 +81,15 @@ impl GlobalScheduler {
             Box::new(|tf: &mut TrapFrame| {
                 // tf was the interrupted processes' trap frame
                 timer::tick_in(crate::param::TICK);
-                self.switch(State::Ready, tf);
-                kprintln!("interrupt");
-                let binding = self.0.lock();
-                let t = binding.as_ref().unwrap();
-                for p in &t.processes {
-                    kprintln!("{:#?}", p.state);
-                }
-                kprintln!("");
+                self.switch(State::Ready, tf); // context switch
+
+                // kprintln!("interrupt");
+                // let binding = self.0.lock();
+                // let t = binding.as_ref().unwrap();
+                // for p in &t.processes {
+                //     kprintln!("{:#?}", p.state);
+                // }
+                // kprintln!("");
 
                 // if let Some(id) = self.kill(tf) {
                 //     kprintln!("{}", id);
@@ -106,14 +107,17 @@ impl GlobalScheduler {
         let mut p = Process::new().expect("failed to make process");
         p.context.pc = USER_IMG_BASE as *const () as *const u64 as u64;
         p.context.sp = p.stack.top().as_u64();
-        p.context.pstate |= 1 << 6; // enable IRQ exceptions
-        p.context.pstate &= !0b1100; // set current EL to 0
+        let mut pstate = PState::new(0);
+        pstate.set_value(0b1_u64, PState::F);
+        pstate.set_value(0b1_u64, PState::A);
+        pstate.set_value(0b1_u64, PState::D);
+        p.context.pstate = pstate.get();
         p.context.ttbr0_el1 = VMM.get_baddr().as_u64();
         p.context.ttbr1_el1 = p.vmap.get_baddr().as_u64();
         self.test_phase_3(&mut p, idle_proc as *const u8);
 
         let frame_addr = p.context.as_ref() as *const TrapFrame as *const u64 as u64;
-        
+    
         unsafe {
             asm!(
                 "mov SP, {context:x}",
@@ -134,8 +138,9 @@ impl GlobalScheduler {
     pub unsafe fn initialize(&self) {
         *self.0.lock() = Some(Scheduler::new());
 
-        for _ in 0..4 {
-            self.add(Process::load(Path::new("/programs/sleep.bin")).expect("failed to load sleep proc"));
+        for _ in 0..1 {
+            // self.add(Process::load(Path::new("/programs/sleep.bin")).expect("failed to load sleep proc"));
+            self.add(Process::load(Path::new("/programs/fib.bin")).expect("failed to load fib proc"));
         }
     }
 
@@ -146,11 +151,11 @@ impl GlobalScheduler {
     pub fn test_phase_3(&self, proc: &mut Process, f : *const u8) {
         use crate::vm::{PagePerm, VirtualAddr};
 
-        let mut page = proc
+        let page: &mut [u8] = proc
             .vmap
             .alloc(VirtualAddr::from(USER_IMG_BASE as u64), PagePerm::RWX);
 
-        let text = unsafe { core::slice::from_raw_parts(f, 100) };
+        let text: &[u8] = unsafe { core::slice::from_raw_parts(f, 100) };
 
         page[0..100].copy_from_slice(text);
     }

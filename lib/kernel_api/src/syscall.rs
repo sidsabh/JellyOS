@@ -45,19 +45,82 @@ pub fn sleep(span: Duration) -> OsResult<Duration> {
 }
 
 pub fn time() -> Duration {
-    unimplemented!("time()");
+    let mut ecode: u64;
+    let mut current_time: u64;
+    let mut frac_time: u64;
+
+    unsafe {
+        asm!(
+            "svc {nr_time}",
+            "mov {current_time}, x0",
+            "mov {frac_time}, x1",
+            "mov {ecode}, x7",
+            nr_time = const NR_TIME,
+            current_time = out(reg) current_time,
+            frac_time = out(reg) frac_time,
+            ecode = out(reg) ecode,
+            out("x0") _,   // Clobbers x0
+            out("x1") _,   // Clobbers x0
+            out("x7") _,   // Clobbers x0
+            options(nostack),
+        );
+    }
+
+    let _ = OsError::from(ecode);
+    Duration::from_secs(current_time) + Duration::from_nanos(frac_time)
 }
 
 pub fn exit() -> ! {
-    unimplemented!("exit()");
+    unsafe {
+        asm!(
+            "svc {nr_exit}",
+            nr_exit = const NR_EXIT,
+            options(nostack),
+        );
+    }
+    loop {}
 }
 
 pub fn write(b: u8) {
-    unimplemented!("write()");
+    let mut ecode: u64;
+
+    unsafe {
+        asm!(
+            "mov w0, {b:w}",
+            "svc {nr_write}",
+            "mov {ecode}, x7",
+            b = in(reg) b,
+            nr_write = const NR_WRITE,
+            ecode = out(reg) ecode,
+            out("x7") _,   // Clobbers x0
+            options(nostack),
+        );
+    }
+
+    let _ = OsError::from(ecode);
 }
 
 pub fn getpid() -> u64 {
-    unimplemented!("getpid()");
+    let mut ecode: u64;
+    let mut pid: u64;
+
+    unsafe {
+        asm!(
+            "svc {nr_time}",
+            "mov {pid}, x0",
+            "mov {ecode}, x7",
+            nr_time = const NR_TIME,
+            pid = out(reg) pid,
+            ecode = out(reg) ecode,
+            out("x0") _,   // Clobbers x0
+            out("x7") _,   // Clobbers x0
+            options(nostack),
+        );
+    }
+
+    let _ = OsError::from(ecode);
+
+    pid
 }
 
 
