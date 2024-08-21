@@ -3,7 +3,7 @@ ROOT := $(shell git rev-parse --show-toplevel)
 KERN := boot
 TARGET := target/aarch64-unknown-none/release/${KERN}
 OBJCPY := cargo objcopy --bin $(KERN) --release -- -O binary --strip-all
-SDCARD ?= $(ROOT)/ext/fat32-imgs/mock1.fat32.img
+SDCARD ?= $(ROOT)/user/fs.img
 
 .PHONY: all build qemu objdump nm check clean install test
 
@@ -35,7 +35,7 @@ clean:
 	rm -rf build
 
 install: build
-	@echo "+ Installing build/$(KERN).elf [install-kernel.py]"
+	@echo "+ Installing operating system [install-kernel.py]"
 	@$(ROOT)/bin/install-kernel.py build/$(KERN).elf
 
 test:

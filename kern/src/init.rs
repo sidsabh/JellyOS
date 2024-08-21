@@ -16,7 +16,6 @@ use crate::param::*;
 use crate::VMM;
 
 global_asm!(include_str!("init/vectors.s"));
-global_asm!(include_str!("init/init.s"));
 
 //
 // big assumptions (better to be checked):
@@ -136,7 +135,7 @@ unsafe fn kmain2() -> ! {
     // Lab 5 1.A
     let core_num = MPIDR_EL1.get_value(MPIDR_EL1::Aff0) as usize;
     *(SPINNING_BASE.byte_add(size_of::<usize>() * core_num)) = 0;
-    kprint!("{}", core_num);
+    debug!("{}", core_num);
 
     loop {}
 }

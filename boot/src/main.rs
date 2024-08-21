@@ -29,10 +29,6 @@ unsafe fn jump_to(addr: *mut u8) -> ! {
         dest = in(reg) addr as usize,
         options(noreturn)
     )
-    // asm!("br $0" : : "r"(addr as usize));
-    // loop {
-    //     asm!("wfe" :::: "volatile")
-    // }
 }
 
 use core::slice::from_raw_parts_mut;

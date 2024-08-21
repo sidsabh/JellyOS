@@ -45,6 +45,11 @@ def load_firmware():
     for pn in glob.glob("%s/../ext/firmware/*" % ROOT):
         rtn.append((os.path.abspath(pn), os.path.basename(pn)))
     return rtn
+def load_user_programs():
+    rtn = []
+    for pn in glob.glob("%s/../user/cache/*" % ROOT):
+        rtn.append((os.path.abspath(pn), "programs/"+os.path.basename(pn)))
+    return rtn
 
 def load_kernel():
     assert(len(sys.argv) >= 2)
@@ -96,6 +101,7 @@ def copy_to(src, name, dst):
     assert(os.path.isdir(dst))
 
     dst = os.path.join(dst, name)
+    os.makedirs(os.path.dirname(dst), exist_ok=True)
 
     hash_dst = md5sum(dst)
     hash_src = md5sum(src)
@@ -121,7 +127,7 @@ def clear_sd_card(directory):
                 shutil.rmtree(file_path)
         except Exception as e:
             print(f'Failed to delete {file_path}. Reason: {e}')
-            
+
 # Use the function in the main logic
 if __name__ == '__main__':
     # if len(sys.argv) == 1 or "-h" in sys.argv or "--help" in sys.argv:
@@ -137,7 +143,7 @@ if __name__ == '__main__':
     clear_sd_card(sdcard)  # Clearing the SD card before proceeding
     config = build_config(kernel)
 
-    for f in load_firmware() + [(kernel, "kernel8.img"), (config, "config.txt")]:
+    for f in load_firmware() + [(kernel, "kernel8.img"), (config, "config.txt")] + load_user_programs():
         copy_to(*f, sdcard)
 
     print(f"[!] unmounting {sdcard}")
