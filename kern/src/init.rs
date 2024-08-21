@@ -1,6 +1,8 @@
 use aarch64::*;
 
+use core::arch::asm;
 use core::arch::global_asm;
+use core::fmt::write;
 use core::mem::zeroed;
 use core::ptr::addr_of;
 use core::ptr::write_volatile;
@@ -8,6 +10,7 @@ use core::ptr::write_volatile;
 mod oom;
 mod panic;
 
+use crate::console::kprint;
 use crate::kmain;
 use crate::param::*;
 use crate::VMM;
@@ -119,23 +122,34 @@ unsafe fn kinit() -> ! {
 #[no_mangle]
 pub unsafe extern "C" fn start2() -> ! {
     // Lab 5 1.A
-    unimplemented!("start2")
+    SP.set(KERN_STACK_BASE - KERN_STACK_SIZE * MPIDR_EL1.get_value(MPIDR_EL1::Aff0) as usize);
+    kinit2();
 }
 
 unsafe fn kinit2() -> ! {
     switch_to_el2();
     switch_to_el1();
-    kmain2()
+    kmain2();
 }
 
 unsafe fn kmain2() -> ! {
     // Lab 5 1.A
-    unimplemented!("kmain2")
+    let core_num = MPIDR_EL1.get_value(MPIDR_EL1::Aff0) as usize;
+    *(SPINNING_BASE.byte_add(size_of::<usize>() * core_num)) = 0;
+    kprint!("{}", core_num);
+
+    loop {}
 }
 
 /// Wakes up each app core by writing the address of `init::start2`
 /// to their spinning base and send event with `sev()`.
 pub unsafe fn initialize_app_cores() {
     // Lab 5 1.A
-    unimplemented!("initialize_app_cores")
+    for core_num in 1..NCORES+1 {
+        SPINNING_BASE.byte_add(size_of::<usize>() * core_num).write(self::start2 as usize);
+    }
+    sev();
+    for core_num in 1..NCORES+1 {
+        while SPINNING_BASE.byte_add(size_of::<usize>() * core_num).read() != 0 {}
+    }
 }

@@ -67,7 +67,7 @@ extern "C" {
     static __bss_end: u64;
 }
 
-unsafe fn kmain() -> ! {
+unsafe fn log_layout() {
     crate::logger::init_logger();
 
     info!(
@@ -78,15 +78,20 @@ unsafe fn kmain() -> ! {
         "bss  beg: {:016x}, end: {:016x}",
         &__bss_beg as *const _ as u64, &__bss_end as *const _ as u64
     );
+}
+
+unsafe fn kmain() -> ! {
 
     spin_sleep(Duration::from_millis(500)); // necessary delay after transmit before tty
 
-    unsafe {
-        ALLOCATOR.initialize();
-        FILESYSTEM.initialize();
-        VMM.initialize();
-        SCHEDULER.initialize();
-    }
+    log_layout();
+
+    ALLOCATOR.initialize();
+    FILESYSTEM.initialize();
+    VMM.initialize();
+    SCHEDULER.initialize();
+    init::initialize_app_cores();
+    VMM.setup();
     SCHEDULER.start();
 }
 
