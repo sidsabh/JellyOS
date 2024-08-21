@@ -9,9 +9,12 @@ pub use self::frame::TrapFrame;
 
 use aarch64::current_el;
 use pi::interrupt::{Controller, Interrupt};
+use pi::local_interrupt::{LocalController, LocalInterrupt};
 
 use self::syndrome::Syndrome;
 use self::syscall::handle_syscall;
+use crate::percore;
+use crate::traps::irq::IrqHandlerRegistry;
 
 #[repr(u16)]
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]

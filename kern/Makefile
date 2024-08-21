@@ -5,8 +5,8 @@ TARGET := target/aarch64-unknown-none/release/${KERN}
 OBJCPY := cargo objcopy --bin $(KERN) --release -- -O binary --strip-all
 TTY_PATH := /dev/ttys005
 TTY_PATH := /dev/tty.SLAB_USBtoUART
-SDCARD ?= $(ROOT)/ext/fat32-imgs/mock1.fat32.img
-QEMU_ARGS ?=
+# SDCARD ?= $(ROOT)/ext/fat32-imgs/mock1.fat32.img
+SDCARD ?= $(ROOT)/user/fs.img
 
 .PHONY: all build qemu transmit objdump nm check clean install test
 
@@ -20,6 +20,14 @@ build:
 
 	@echo "+ Building build/$(KERN).bin [objcopy]"
 	@$(OBJCPY) build/$(KERN).bin
+
+build-all:
+	@(cd ../ext/uspi/lib; make)
+	cp -f ../ext/uspi/lib/libuspi.a ./.cargo/
+	@(cd ../ext/uspi/env/lib; make)
+	cp -f ../ext/uspi/env/lib/libuspienv.a ./.cargo/
+	touch src/main.rs
+	make build
 
 check:
 	@cargo check

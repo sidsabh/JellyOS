@@ -2,12 +2,12 @@ use crate::common::IO_BASE;
 
 use shim::const_assert_size;
 use volatile::prelude::*;
-use volatile::{Volatile, ReadVolatile};
+use volatile::{ReadVolatile, Volatile};
 
 // "The base address for the ARM interrupt register is 0x7E00B000.""
 const INT_BASE: usize = IO_BASE + 0xB000 + 0x200;
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Interrupt {
     Timer1 = 1,
     Timer3 = 3,
@@ -22,9 +22,11 @@ pub enum Interrupt {
 impl Interrupt {
     pub const MAX: usize = 8;
 
-    pub fn iter() -> core::slice::Iter<'static, Interrupt> {
+    pub fn iter() -> impl Iterator<Item = Interrupt> {
         use Interrupt::*;
-        [Timer1, Timer3, Usb, Gpio0, Gpio1, Gpio2, Gpio3, Uart].iter()
+        [Timer1, Timer3, Usb, Gpio0, Gpio1, Gpio2, Gpio3, Uart]
+            .iter()
+            .map(|int| *int)
     }
 
     pub fn to_index(i: Interrupt) -> usize {
@@ -57,7 +59,6 @@ impl Interrupt {
     }
 }
 
-
 impl From<usize> for Interrupt {
     fn from(irq: usize) -> Interrupt {
         use Interrupt::*;
@@ -70,7 +71,7 @@ impl From<usize> for Interrupt {
             51 => Gpio2,
             52 => Gpio3,
             57 => Uart,
-            _ => panic!("Unkonwn irq: {}", irq),
+            _ => panic!("Unknown irq: {}", irq),
         }
     }
 }
@@ -93,7 +94,7 @@ const_assert_size!(Registers, 0x28);
 /// An interrupt controller. Used to enable and disable interrupts as well as to
 /// check if an interrupt is pending.
 pub struct Controller {
-    registers: &'static mut Registers
+    registers: &'static mut Registers,
 }
 
 impl Controller {
@@ -120,5 +121,11 @@ impl Controller {
     pub fn is_pending(&self, int: Interrupt) -> bool {
         let idx = int as usize;
         self.registers.IRQ_PENDING[idx / 32].has_mask(1 << (idx % 32))
+    }
+
+    /// Enables the interrupt as FIQ interrupt
+    pub fn enable_fiq(&mut self, int: Interrupt) {
+        // Lab 5 2.B
+        unimplemented!("enable_fiq")
     }
 }

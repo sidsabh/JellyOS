@@ -21,23 +21,28 @@
 mod init;
 
 extern crate alloc;
+#[macro_use]
+extern crate log;
 
 pub mod allocator;
 pub mod console;
 pub mod fs;
+pub mod logger;
 pub mod mutex;
-pub mod shell;
+pub mod net;
 pub mod param;
+pub mod percore;
 pub mod process;
+pub mod shell;
 pub mod traps;
 pub mod vm;
 
-use shell::shell;
-
 use allocator::Allocator;
 use fs::FileSystem;
+use net::uspi::Usb;
+use net::GlobalEthernetDriver;
 use process::GlobalScheduler;
-use traps::irq::Irq;
+use traps::irq::{Fiq, GlobalIrq, LocalIrq};
 use vm::VMManager;
 
 #[cfg_attr(not(test), global_allocator)]
@@ -45,14 +50,35 @@ pub static ALLOCATOR: Allocator = Allocator::uninitialized();
 pub static FILESYSTEM: FileSystem = FileSystem::uninitialized();
 pub static SCHEDULER: GlobalScheduler = GlobalScheduler::uninitialized();
 pub static VMM: VMManager = VMManager::uninitialized();
-pub static IRQ: Irq = Irq::uninitialized();
+pub static USB: Usb = Usb::uninitialized();
+pub static GLOBAL_IRQ: GlobalIrq = GlobalIrq::new();
+pub static IRQ: LocalIrq = LocalIrq::new();
+pub static FIQ: Fiq = Fiq::new();
+pub static ETHERNET: GlobalEthernetDriver = GlobalEthernetDriver::uninitialized();
 
 use crate::console::kprintln;
 use pi::timer::spin_sleep;
 use core::time::Duration;
 
+extern "C" {
+    static __text_beg: u64;
+    static __text_end: u64;
+    static __bss_beg: u64;
+    static __bss_end: u64;
+}
 
-fn kmain() -> ! {
+unsafe fn kmain() -> ! {
+    crate::logger::init_logger();
+
+    info!(
+        "text beg: {:016x}, end: {:016x}",
+        &__text_beg as *const _ as u64, &__text_end as *const _ as u64
+    );
+    info!(
+        "bss  beg: {:016x}, end: {:016x}",
+        &__bss_beg as *const _ as u64, &__bss_end as *const _ as u64
+    );
+
     spin_sleep(Duration::from_millis(500)); // necessary delay after transmit before tty
 
     unsafe {
@@ -61,8 +87,7 @@ fn kmain() -> ! {
         VMM.initialize();
         SCHEDULER.initialize();
     }
-
-    IRQ.initialize();
+    // IRQ.initialize();
     SCHEDULER.start();
 }
 

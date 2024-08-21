@@ -14,8 +14,8 @@ use core::arch::asm;
 pub extern "C" fn _start() -> ! {
     loop {
         let ms = 10000;
-        let error: u64;
-        let elapsed_ms: u64;
+        let _error: u64;
+        let _elapsed_ms: u64;
 
         unsafe {
             asm!(

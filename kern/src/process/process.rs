@@ -1,9 +1,10 @@
 use alloc::boxed::Box;
-use fat32::traits::FileSystem;
-use shim::io::{self, Read};
+use alloc::vec::Vec;
+use shim::io;
 use shim::path::Path;
 
-use aarch64::{self, PState, SPSR_EL1};
+use aarch64;
+use smoltcp::socket::SocketHandle;
 
 use crate::console::kprintln;
 use crate::{param::*, FILESYSTEM};
@@ -26,6 +27,9 @@ pub struct Process {
     pub vmap: Box<UserPageTable>,
     /// The scheduling state of the process.
     pub state: State,
+    // Lab 5 2.C
+    //// Socket handles held by the current process
+    // pub sockets: Vec<SocketHandle>,
 }
 use kernel_api::{OsResult, OsError};
 use crate::allocator::align_down;
@@ -54,8 +58,8 @@ impl Process {
         Ok(p)
     }
 
-    /// Load a program stored in the given path by calling `do_load()` method.
-    /// Set trapframe `context` corresponding to the its page table.
+    /// Loads a program stored in the given path by calling `do_load()` method.
+    /// Sets trapframe `context` corresponding to its page table.
     /// `sp` - the address of stack top
     /// `elr` - the address of image base.
     /// `ttbr0` - the base address of kernel page table
@@ -72,6 +76,7 @@ impl Process {
         p.context.pc = Process::get_image_base().as_u64();
         p.context.ttbr0_el1 = VMM.get_baddr().as_u64();
         p.context.ttbr1_el1 = p.vmap.get_baddr().as_u64();
+        use aarch64::PState;
         let mut pstate = PState::new(0);
         pstate.set_value(0b1_u64, PState::F);
         pstate.set_value(0b1_u64, PState::A);
@@ -85,6 +90,8 @@ impl Process {
     /// Allocates one page for stack with read/write permission, and N pages with read/write/execute
     /// permission to load file's contents.
     fn do_load<P: AsRef<Path>>(pn: P) -> OsResult<Process> {
+        use fat32::traits::FileSystem;
+        use shim::io::Read;
         let mut file = FILESYSTEM.open_file(pn)?;
         let mut p = Process::new().expect("failed to create processs");
         p.vmap.alloc(Process::get_stack_base(), PagePerm::RW);

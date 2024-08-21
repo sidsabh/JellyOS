@@ -12,7 +12,6 @@ pub fn wfi() {
     unsafe { asm!("wfi") };
 }
 
-
 /// A NOOP that won't be optimized out.
 #[inline(always)]
 pub fn nop() {
