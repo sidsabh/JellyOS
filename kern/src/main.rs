@@ -87,7 +87,6 @@ unsafe fn kmain() -> ! {
         VMM.initialize();
         SCHEDULER.initialize();
     }
-    // IRQ.initialize();
     SCHEDULER.start();
 }
 

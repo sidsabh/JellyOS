@@ -16,13 +16,6 @@ fn fib(n: u64) -> u64 {
 }
 
 fn main() {
-<<<<<<< HEAD
-    loop {
-        println!("Started...");
-        let rtn = fib(40);
-        println!("Ended: Result = {}", rtn);
-    }
-=======
     let pid = getpid();
     let beg = time();
     println!("[{:02}] Started: {:?}", pid, beg);
@@ -32,5 +25,4 @@ fn main() {
     let end = time();
     println!("[{:02}] Ended: {:?}", pid, end);
     println!("[{:02}] Result: {} ({:?})", pid, rtn, end - beg);
->>>>>>> cs3210/lab5
 }

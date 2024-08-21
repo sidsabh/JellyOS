@@ -1,4 +1,5 @@
 use alloc::boxed::Box;
+use core::borrow::Borrow;
 use core::ops::Index;
 
 use pi::interrupt::Interrupt;
@@ -113,19 +114,12 @@ where
 {
     /// Register an irq handler for an interrupt.
     fn register(&self, int: I, handler: IrqHandler) {
-        if let Some(arr) = self.0.lock().as_mut() {
-            arr[Interrupt::to_index(int)] = Some(handler)
-        }
+        *self[int].borrow().lock() = Some(handler);
     }
 
     /// Executes an irq handler for the given interrupt.
     fn invoke(&self, int: I, tf: &mut TrapFrame) {
-        if let Some(func) = self
-            .0
-            .lock()
-            .as_mut()
-            .and_then(|arr| arr[Interrupt::to_index(int)].as_mut())
-        {
+        if let Some(func) = self[int].borrow().lock().as_mut() {
             func(tf);
         }
     }

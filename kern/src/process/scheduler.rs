@@ -20,6 +20,7 @@ use crate::percore::{get_preemptive_counter, is_mmu_ready, local_irq};
 use crate::process::{Id, Process, State};
 use crate::traps::irq::IrqHandlerRegistry;
 use crate::traps::TrapFrame;
+use crate::GLOBAL_IRQ;
 use crate::{ETHERNET, USB};
 
 /// Process scheduler for the entire machine.
@@ -93,34 +94,7 @@ impl GlobalScheduler {
     /// preemptive scheduling. This method should not return under normal conditions.
     pub fn start(&'static self) -> ! {
         // register handler fn for timer
-        use crate::IRQ;
-        use pi::interrupt::Interrupt;
-        IRQ.register(
-            Interrupt::Timer1,
-            Box::new(|tf: &mut TrapFrame| {
-                // tf was the interrupted processes' trap frame
-                pi::timer::tick_in(crate::param::TICK);
-                self.switch(State::Ready, tf); // context switch
-
-                // kprintln!("interrupt");
-                // let binding = self.0.lock();
-                // let t = binding.as_ref().unwrap();
-                // for p in &t.processes {
-                //     kprintln!("{:#?}", p.state);
-                // }
-                // kprintln!("");
-
-                // if let Some(id) = self.kill(tf) {
-                //     kprintln!("{}", id);
-                // }
-            }),
-        );
-
-        // enable timer interrupts
-        pi::interrupt::Controller::new().enable(Interrupt::Timer1);
-
-        // set timer interupt
-        pi::timer::tick_in(crate::param::TICK);
+        self.initialize_global_timer_interrupt();
 
         // run first
         let mut p = Process::new().expect("failed to make process");
@@ -136,7 +110,7 @@ impl GlobalScheduler {
         self.test_phase_3(&mut p, idle_proc as *const u8);
 
         let frame_addr = p.context.as_ref() as *const TrapFrame as *const u64 as u64;
-    
+
         unsafe {
             asm!(
                 "mov SP, {context:x}",
@@ -161,8 +135,36 @@ impl GlobalScheduler {
     /// # Lab 5
     /// Registers a timer handler with `Usb::start_kernel_timer` which will
     /// invoke `poll_ethernet` after 1 second.
-    pub fn initialize_global_timer_interrupt(&self) {
-        unimplemented!("initialize_global_timer_interrupt()")
+    pub fn initialize_global_timer_interrupt(&'static self) {
+        use crate::IRQ;
+        use pi::interrupt::Interrupt;
+        GLOBAL_IRQ.register(
+            Interrupt::Timer1,
+            Box::new(|tf: &mut TrapFrame| {
+
+                // tf was the interrupted processes' trap frame
+                pi::timer::tick_in(crate::param::TICK);
+                self.switch(State::Ready, tf); // context switch
+
+                // kprintln!("interrupt");
+                // let binding = self.0.lock();
+                // let t = binding.as_ref().unwrap();
+                // for p in &t.processes {
+                //     kprintln!("{:#?}", p.state);
+                // }
+                // kprintln!("");
+
+                // if let Some(id) = self.kill(tf) {
+                //     kprintln!("{}", id);
+                // }
+            }),
+        );
+
+        // enable timer interrupts
+        pi::interrupt::Controller::new().enable(Interrupt::Timer1);
+
+        // set timer interupt
+        pi::timer::tick_in(crate::param::TICK);
     }
 
     /// Initializes the per-core local timer interrupt with `pi::local_interrupt`.
@@ -180,7 +182,9 @@ impl GlobalScheduler {
         for _ in 0..1 {
             // self.add(Process::load(Path::new("/programs/sleep.bin")).expect("failed to load sleep proc"));
             use shim::path::Path;
-            self.add(Process::load(Path::new("/programs/fib.bin")).expect("failed to load fib proc"));
+            self.add(
+                Process::load(Path::new("/programs/fib.bin")).expect("failed to load fib proc"),
+            );
         }
     }
 
@@ -188,7 +192,7 @@ impl GlobalScheduler {
     //
     // * A method to load a extern function to the user process's page table.
     //
-    pub fn test_phase_3(&self, proc: &mut Process, f : *const u8) {
+    pub fn test_phase_3(&self, proc: &mut Process, f: *const u8) {
         use crate::vm::{PagePerm, VirtualAddr};
 
         let page: &mut [u8] = proc

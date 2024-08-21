@@ -10,6 +10,7 @@ pub use self::frame::TrapFrame;
 use aarch64::current_el;
 use pi::interrupt::{Controller, Interrupt};
 use pi::local_interrupt::{LocalController, LocalInterrupt};
+use crate::GLOBAL_IRQ;
 
 use self::syndrome::Syndrome;
 use self::syscall::handle_syscall;
@@ -61,9 +62,9 @@ pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
         Kind::Irq => {
             let controller = Controller::new();
             for i in Interrupt::iter() {
-                if controller.is_pending(*i) {
+                if controller.is_pending(i) {
                     // kprintln!("{:#?}, idx:{:#?} ", info, Interrupt::to_index(*i));
-                    IRQ.invoke(*i, tf);
+                    GLOBAL_IRQ.invoke(i, tf);
                     break;
                 }
             }

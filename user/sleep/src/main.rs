@@ -24,8 +24,8 @@ pub extern "C" fn _start() -> ! {
                 "mov {ems}, x0",
                 "mov {error}, x7",
                 ms = in(reg) ms,
-                ems = out(reg) elapsed_ms,
-                error = out(reg) error,
+                ems = out(reg) _elapsed_ms,
+                error = out(reg) _error,
                 out("x0") _,   // Clobbers x0
                 out("x7") _,   // Clobbers x7
                 options(nostack),

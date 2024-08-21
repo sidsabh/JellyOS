@@ -2,38 +2,31 @@
 
 IMG=fs.img
 MNT=mnt
+PROGS=(sleep fib echo)
 
-# PROGS=(sleep fib echo)
-PROGS=(sleep)
+# Create the image file
+dd if=/dev/zero of=$IMG bs=1m count=128
+
+# Attach the image
+DEVICE=$(hdiutil attach -imagekey diskimage-class=CRawDiskImage -nomount $IMG | tr -d '[:space:]')
+
+# Now appending 's1' should not introduce unexpected spaces
+
+# Partition the disk and format it as FAT32
+diskutil partitionDisk $DEVICE 1 MBR FAT32 "PARTITION" R
+
+PARTITION="${DEVICE}s1"
+
+sudo diskutil unmount $PARTITION
+
+# # Mount the partition
+mkdir -p $MNT
+mount -t msdos $PARTITION $MNT
+
+# Handle errors and clean up properly
+trap "umount $MNT; rm -rf $MNT; hdiutil detach $DEVICE" EXIT
 
 for d in ${PROGS[@]}; do
     (cd $d; make build)
-done
-
-dd if=/dev/zero of=$IMG bs=1m count=128
-echo -e "n\np\n1\n\n\nt\nc\nw\n" | fdisk $IMG
-
-LO=$(sudo losetup --show -f -P $IMG)
-LOP1=${LO}p1
-
-if [ ! -e $LOP1 ]; then
-    PARTITIONS=$(lsblk --raw --output "MAJ:MIN" --noheadings ${LO} | tail -n +2)COUNTER=1
-    COUNTER=1
-    for i in $PARTITIONS; do
-        MAJ=$(echo $i | cut -d: -f1)
-        MIN=$(echo $i | cut -d: -f2)
-        if [ ! -e "${LO}p${COUNTER}" ]; then sudo mknod ${LO}p${COUNTER} b $MAJ $MIN; fi
-        COUNTER=$((COUNTER + 1))
-    done
-fi
-
-sudo mkfs.vfat -F32 $LOP1
-
-mkdir -p $MNT
-sudo mount $LOP1 $MNT
-
-trap "sudo umount $MNT; rmdir $MNT; sudo losetup -d $LO" EXIT
-
-for d in ${PROGS[@]}; do
-    sudo cp $d/build/$d.bin $MNT/$d
+    cp $d/build/$d.bin $MNT/$d
 done
