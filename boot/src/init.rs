@@ -1,9 +1,9 @@
+use aarch64::*;
 use core::mem::zeroed;
 use core::ptr::write_volatile;
-
 mod panic;
 
-use crate::kmain;
+use crate::bootloader;
 use core::arch::global_asm;
 
 global_asm!(include_str!("init/init.s"));
@@ -23,9 +23,13 @@ unsafe fn zeros_bss() {
         iter = iter.add(1);
     }
 }
-
+/// Kernel entrypoint for core 0
 #[no_mangle]
-unsafe fn kinit() -> ! {
-    zeros_bss();
-    kmain();
+pub unsafe extern "C" fn kinit() -> ! {
+    if MPIDR_EL1.get_value(MPIDR_EL1::Aff0) == 0 {
+        SP.set(crate::BINARY_START_ADDR);
+        zeros_bss();
+        bootloader();
+    }
+    unreachable!();
 }

@@ -1,8 +1,5 @@
-#![cfg_attr(not(test), no_std)]
-#![cfg_attr(not(test), no_main)]
-
-
-#[cfg(not(test))]
+#![no_std]
+#![no_main]
 
 mod init;
 
@@ -11,6 +8,7 @@ use xmodem::Xmodem;
 use core::time::Duration;
 use pi;
 use core::arch::asm;
+use core::result::Result::{Ok, Err};
 
 /// Start address of the binary to load and of the bootloader.
 const BINARY_START_ADDR: usize = 0x80000;
@@ -32,7 +30,7 @@ unsafe fn jump_to(addr: *mut u8) -> ! {
 }
 
 use core::slice::from_raw_parts_mut;
-fn kmain() -> ! {
+fn bootloader() -> ! {
     loop {
         let into: &mut [u8] = unsafe {from_raw_parts_mut(BINARY_START, MAX_BINARY_SIZE)};
         let mut from = MiniUart::new();
@@ -42,7 +40,7 @@ fn kmain() -> ! {
                 break;
             }, 
             Err(_) => {
-                // MiniUart::new().write("Failed to load binary\n".as_bytes()).expect("Failed to write fail message");
+                
             }
         }
     }

@@ -11,6 +11,7 @@ mod oom;
 mod panic;
 
 use crate::console::kprint;
+use crate::console::kprintln;
 use crate::kmain;
 use crate::param::*;
 use crate::VMM;
@@ -30,9 +31,9 @@ global_asm!(include_str!("init/vectors.s"));
 pub unsafe extern "C" fn _start() -> ! {
     if MPIDR_EL1.get_value(MPIDR_EL1::Aff0) == 0 {
         SP.set(KERN_STACK_BASE);
-        kinit()
+        kinit();
     }
-    unreachable!()
+    loop {}
 }
 
 #[allow(static_mut_refs)]
@@ -54,6 +55,9 @@ unsafe fn zeros_bss() {
 #[no_mangle]
 unsafe fn switch_to_el2() {
     if current_el() == 3 {
+
+        SP_EL2.set(SP.get() as u64);
+
         // set up Secure Configuration Register (D13.2.10)
         SCR_EL3.set(SCR_EL3::NS | SCR_EL3::SMD | SCR_EL3::HCE | SCR_EL3::RW | SCR_EL3::RES1);
 
@@ -67,6 +71,22 @@ unsafe fn switch_to_el2() {
     }
 }
 
+
+// asm_switch_to_el2:
+//     // switch to EL2 if we're in EL3. otherwise switch to EL1
+//     cmp     x0, 0b11            // EL3
+//     bne     switch_to_el1
+
+//     // set-up SCR_EL3 (bits 0, 4, 5, 7, 8, 10) (A53: 4.3.42)
+//     mov     x2, #0x5b1
+//     msr     SCR_EL3, x2
+
+//     // set-up SPSR and PL switch! (bits 0, 3, 6, 7, 8, 9) (ref: C5.2.20)
+//     mov     x2, #0x3c9
+//     msr     SPSR_EL3, x2
+//     adr     x2, switch_to_el1
+//     msr     ELR_EL3, x2
+//     eret
 #[no_mangle]
 unsafe fn switch_to_el1() {
     extern "C" {
@@ -111,6 +131,12 @@ unsafe fn switch_to_el1() {
 
 #[no_mangle]
 unsafe fn kinit() -> ! {
+    use pi::timer::spin_sleep;
+    use core::time::Duration;
+    spin_sleep(Duration::from_millis(500)); // necessary delay after transmit before tty
+    kprintln!("{:x}", SP.get());
+    kprintln!("{:x}", current_el());
+
     zeros_bss();
     switch_to_el2();
     switch_to_el1();
@@ -134,8 +160,8 @@ unsafe fn kinit2() -> ! {
 unsafe fn kmain2() -> ! {
     // Lab 5 1.A
     let core_num = MPIDR_EL1.get_value(MPIDR_EL1::Aff0) as usize;
-    *(SPINNING_BASE.byte_add(size_of::<usize>() * core_num)) = 0;
-    debug!("{}", core_num);
+    SPINNING_BASE.add(core_num).write(0);
+    kprint!("{}", core_num);
 
     loop {}
 }
@@ -145,10 +171,11 @@ unsafe fn kmain2() -> ! {
 pub unsafe fn initialize_app_cores() {
     // Lab 5 1.A
     for core_num in 1..NCORES+1 {
-        SPINNING_BASE.byte_add(size_of::<usize>() * core_num).write(self::start2 as usize);
+        SPINNING_BASE.add(core_num).write(self::start2 as usize);
     }
+
     sev();
     for core_num in 1..NCORES+1 {
-        while SPINNING_BASE.byte_add(size_of::<usize>() * core_num).read() != 0 {}
+        while SPINNING_BASE.add(core_num).read_volatile() != 0 {}
     }
 }

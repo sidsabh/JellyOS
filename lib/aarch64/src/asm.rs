@@ -30,6 +30,12 @@ pub fn isb() {
     unsafe { asm!("isb") };
 }
 
+/// Data Synchronization Barrier
+#[inline(always)]
+pub fn dsb() {
+    unsafe { asm!("dsb SY") };
+}
+
 /// Set Event
 #[inline(always)]
 pub fn sev() {

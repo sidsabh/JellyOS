@@ -88,10 +88,11 @@ unsafe fn kmain() -> ! {
 
     ALLOCATOR.initialize();
     FILESYSTEM.initialize();
-    VMM.initialize();
-    SCHEDULER.initialize();
     init::initialize_app_cores();
-    VMM.setup();
-    SCHEDULER.start();
+    // VMM.initialize();
+    // SCHEDULER.initialize();
+    // VMM.setup();
+    // SCHEDULER.start();
+    loop {}
 }
 

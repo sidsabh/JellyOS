@@ -14,3 +14,4 @@ edition = "2021"
 pi = { path = "../lib/pi/" }
 shim = { path = "../lib/shim", features = ["no_std"] }
 xmodem = { path = "../lib/xmodem", features = ["no_std"] }
+aarch64 = { path = "../lib/aarch64/" }

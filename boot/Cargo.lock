@@ -10,6 +10,7 @@ version = "0.1.0"
 name = "boot"
 version = "0.1.0"
 dependencies = [
+ "aarch64",
  "pi",
  "shim",
  "xmodem",

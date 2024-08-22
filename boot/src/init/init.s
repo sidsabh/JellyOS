@@ -3,21 +3,23 @@
 .global _start
 
 _start:
-    // read cpu affinity, start core 0, halt rest
-    mrs     x1, mpidr_el1
-    and     x1, x1, #3
-    cbz     x1, 2f
+	mrs x6, MPIDR_EL1
+	and x6, x6, #0x3
+	cbz x6, primary_cpu
 
-1:
-    // core affinity != 0, halt it
-    wfe
-    b       1b
+	mov x5, 0xd8
+secondary_spin:
+	wfe
+	ldr x4, [x5, x6, lsl #3]
+	cbz x4, secondary_spin
+	mov x0, #0
+	b boot_kernel
 
-2:
-    // set the stack to start before our boot code
-    adr     x1, _start
-    mov     sp, x1
+primary_cpu:
+	bl kinit
 
-    // jump to kinit, which shouldn't return. halt if it does
-    bl      kinit
-    b       1b
+boot_kernel:
+	mov x1, #0
+	mov x2, #0
+	mov x3, #0
+	br x4
