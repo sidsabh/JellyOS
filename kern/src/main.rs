@@ -82,17 +82,19 @@ unsafe fn log_layout() {
 
 unsafe fn kmain() -> ! {
 
+    // bootstrapping core
     spin_sleep(Duration::from_millis(500)); // necessary delay after transmit before tty
-
     log_layout();
-
     ALLOCATOR.initialize();
     FILESYSTEM.initialize();
-    init::initialize_app_cores();
-    // VMM.initialize();
-    // SCHEDULER.initialize();
-    // VMM.setup();
-    // SCHEDULER.start();
-    loop {}
+    VMM.initialize();
+    // init::initialize_app_cores();
+
+    per_core_main();
 }
 
+unsafe fn per_core_main() -> ! {
+    SCHEDULER.initialize();
+    VMM.setup();
+    SCHEDULER.start();
+}

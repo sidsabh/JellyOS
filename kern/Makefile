@@ -4,8 +4,8 @@ KERN := kernel
 TARGET := target/aarch64-unknown-none/release/${KERN}
 OBJCPY := cargo objcopy --bin $(KERN) --release -- -O binary --strip-all
 TTY_PATH := /dev/tty.SLAB_USBtoUART
-TTY_PATH := /dev/ttys014
 # SDCARD ?= $(ROOT)/ext/fat32-imgs/mock1.fat32.img
+TTY_PATH := /dev/ttys009
 SDCARD ?= $(ROOT)/user/fs.img
 
 .PHONY: all build qemu transmit objdump nm check clean install test

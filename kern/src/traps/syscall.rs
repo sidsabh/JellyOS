@@ -3,7 +3,7 @@ use core::time::Duration;
 
 use smoltcp::wire::{IpAddress, IpEndpoint};
 
-use crate::console::{kprint, CONSOLE};
+use crate::console::{kprint, kprintln, CONSOLE};
 use crate::param::USER_IMG_BASE;
 use crate::process::State;
 use crate::traps::TrapFrame;
@@ -49,10 +49,8 @@ pub fn sys_time(tf: &mut TrapFrame) {
 ///
 /// This system call does not take paramer and does not return any value.
 pub fn sys_exit(tf: &mut TrapFrame) {
-    SCHEDULER.switch(State::Dead, tf);
     let id = SCHEDULER.kill(tf).expect("failed to kill proc");
-    use crate::kprintln;
-    kprintln!("killed proc{}", id);
+    SCHEDULER.switch(State::Dead, tf);
 }
 
 /// Writes to console.

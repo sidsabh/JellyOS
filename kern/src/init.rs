@@ -14,6 +14,8 @@ use crate::console::kprint;
 use crate::console::kprintln;
 use crate::kmain;
 use crate::param::*;
+use crate::per_core_main;
+use crate::shell;
 use crate::VMM;
 
 global_asm!(include_str!("init/vectors.s"));
@@ -160,22 +162,22 @@ unsafe fn kinit2() -> ! {
 unsafe fn kmain2() -> ! {
     // Lab 5 1.A
     let core_num = MPIDR_EL1.get_value(MPIDR_EL1::Aff0) as usize;
-    SPINNING_BASE.add(core_num).write(0);
+    SPINNING_BASE.add(core_num).write_volatile(0);
     kprint!("{}", core_num);
 
-    loop {}
+    loop {};
+    // per_core_main();
 }
 
 /// Wakes up each app core by writing the address of `init::start2`
 /// to their spinning base and send event with `sev()`.
 pub unsafe fn initialize_app_cores() {
     // Lab 5 1.A
-    for core_num in 1..NCORES+1 {
-        SPINNING_BASE.add(core_num).write(self::start2 as usize);
+    for core_num in 1..NCORES {
+        SPINNING_BASE.add(core_num).write_volatile(self::start2 as usize);
     }
-
     sev();
-    for core_num in 1..NCORES+1 {
+    for core_num in 1..NCORES {
         while SPINNING_BASE.add(core_num).read_volatile() != 0 {}
     }
 }

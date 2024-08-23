@@ -146,13 +146,13 @@ impl GlobalScheduler {
                 pi::timer::tick_in(crate::param::TICK);
                 self.switch(State::Ready, tf); // context switch
 
-                kprintln!("interrupt");
-                let binding = self.0.lock();
-                let t = binding.as_ref().unwrap();
-                for p in &t.processes {
-                    kprintln!("{:#?}", p.state);
-                }
-                kprintln!("");
+                // kprintln!("interrupt");
+                // let binding = self.0.lock();
+                // let t = binding.as_ref().unwrap();
+                // for p in &t.processes {
+                //     kprintln!("{:#?}", p.state);
+                // }
+                // kprintln!("");
 
                 // if let Some(id) = self.kill(tf) {
                 //     kprintln!("{}", id);
@@ -183,7 +183,7 @@ impl GlobalScheduler {
             // self.add(Process::load(Path::new("/programs/sleep.bin")).expect("failed to load sleep proc"));
             use shim::path::Path;
             self.add(
-                Process::load(Path::new("/programs/sleep.bin")).expect("failed to load sleep proc"),
+                Process::load(Path::new("/programs/fib.bin")).expect("failed to load sleep proc"),
             );
         }
     }

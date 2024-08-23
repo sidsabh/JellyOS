@@ -157,10 +157,13 @@ struct Console;
 
 impl fmt::Write for Console {
     fn write_str(&mut self, s: &str) -> fmt::Result {
-        self.write_str(s);
+        for b in s.bytes() {
+            write(b);
+        }
         Ok(())
     }
 }
+
 
 #[macro_export]
 macro_rules! print {
