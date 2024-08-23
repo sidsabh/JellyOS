@@ -100,7 +100,7 @@ pub fn write(b: u8) {
     let _ = OsError::from(ecode);
 }
 
-pub fn write_str(msg: &str, len: usize) {
+pub fn write_str(msg: &str) {
     let mut ecode: u64;
 
     unsafe {
@@ -110,7 +110,7 @@ pub fn write_str(msg: &str, len: usize) {
             "svc {nr_write_str}",
             "mov {ecode}, x7",
             str_addr = in(reg) msg as *const str as *const usize as usize,
-            str_len = in(reg) len,
+            str_len = in(reg) msg.len(),
             nr_write_str = const NR_WRITE_STR,
             ecode = out(reg) ecode,
             out("x7") _,   // Clobbers x0
@@ -179,10 +179,10 @@ struct Console;
 
 impl fmt::Write for Console {
     fn write_str(&mut self, s: &str) -> fmt::Result {
-        for b in s.bytes() {
-            write(b);
-        }
-        // write_str(s, s.len());
+        // for b in s.bytes() {
+        //     write(b);
+        // }
+        write_str(s);
 
         Ok(())
     }

@@ -103,6 +103,7 @@ impl GlobalScheduler {
         }
         self.initialize_local_timer_interrupt();
 
+
         let mut tf = Box::new(TrapFrame::default());
         tf.sp = Process::get_stack_top().as_u64();
         tf.pc = Process::get_image_base().as_u64();
