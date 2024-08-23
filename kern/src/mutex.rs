@@ -49,6 +49,7 @@ impl<T> Mutex<T> {
             }
         } else {
             let this = 0;
+            assert!(aarch64::affinity() == this);
             if !self.lock.load(Ordering::Relaxed) || self.owner.load(Ordering::Relaxed) == this {
                 self.lock.store(true, Ordering::Relaxed);
                 self.owner.store(this, Ordering::Relaxed);
@@ -74,7 +75,7 @@ impl<T> Mutex<T> {
 
     fn unlock(&self) {
         if is_mmu_ready() {
-            putcpu(self.owner.load(Ordering::Relaxed));
+            putcpu(self.owner.load(Ordering::Acquire));
             self.lock.store(false, Ordering::Release);
         } else {
             self.lock.store(false, Ordering::Relaxed);
