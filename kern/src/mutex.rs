@@ -30,17 +30,32 @@ impl<T> Mutex<T> {
     }
 }
 
+use crate::percore::*;
 impl<T> Mutex<T> {
     // Once MMU/cache is enabled, do the right thing here. For now, we don't
     // need any real synchronization.
     pub fn try_lock(&self) -> Option<MutexGuard<T>> {
-        let this = 0;
-        if !self.lock.load(Ordering::Relaxed) || self.owner.load(Ordering::Relaxed) == this {
-            self.lock.store(true, Ordering::Relaxed);
-            self.owner.store(this, Ordering::Relaxed);
-            Some(MutexGuard { lock: &self })
+        if is_mmu_ready() {
+            let this = getcpu();
+            if !self
+                .lock
+                .swap(true, Ordering::Acquire)
+                || self.owner.load(Ordering::Acquire) == this
+            {
+                self.owner.store(this, Ordering::Release);
+                Some(MutexGuard { lock: &self })
+            } else {
+                None
+            }
         } else {
-            None
+            let this = 0;
+            if !self.lock.load(Ordering::Relaxed) || self.owner.load(Ordering::Relaxed) == this {
+                self.lock.store(true, Ordering::Relaxed);
+                self.owner.store(this, Ordering::Relaxed);
+                Some(MutexGuard { lock: &self })
+            } else {
+                None
+            }
         }
     }
 
@@ -58,7 +73,12 @@ impl<T> Mutex<T> {
     }
 
     fn unlock(&self) {
-        self.lock.store(false, Ordering::Relaxed);
+        if is_mmu_ready() {
+            putcpu(self.owner.load(Ordering::Relaxed));
+            self.lock.store(false, Ordering::Release);
+        } else {
+            self.lock.store(false, Ordering::Relaxed);
+        }
     }
 }
 

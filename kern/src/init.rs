@@ -163,10 +163,8 @@ unsafe fn kmain2() -> ! {
     // Lab 5 1.A
     let core_num = MPIDR_EL1.get_value(MPIDR_EL1::Aff0) as usize;
     SPINNING_BASE.add(core_num).write_volatile(0);
-    kprint!("{}", core_num);
 
-    loop {};
-    // per_core_main();
+    per_core_main();
 }
 
 /// Wakes up each app core by writing the address of `init::start2`
