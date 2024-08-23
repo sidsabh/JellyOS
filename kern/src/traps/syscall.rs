@@ -60,7 +60,8 @@ pub fn sys_exit(tf: &mut TrapFrame) {
 /// It only returns the usual status value.
 pub fn sys_write(b: u8, tf: &mut TrapFrame) {
     let mut console = CONSOLE.lock();
-    console.write_byte(b);
+    use shim::io::Write;
+    console.write(&mut[b]).expect("write failed");
     tf.regs[7] = 1;
 }
 

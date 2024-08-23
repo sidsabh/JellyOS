@@ -3,7 +3,7 @@
 IMG=fs.img
 MNT=mnt
 PROGS=(sleep fib echo)
-CACHE=programs
+CACHE=cache
 
 # Create the image file
 dd if=/dev/zero of=$IMG bs=1m count=128
@@ -33,6 +33,7 @@ mkdir -p $MNT/programs
 
 # Copy the binaries to the mounted partition
 for d in ${PROGS[@]}; do
+    make -C $d
     sudo cp $d/build/$d.bin $CACHE/$d.bin
     sudo cp $CACHE/$d.bin $MNT/programs/$d.bin
 done
