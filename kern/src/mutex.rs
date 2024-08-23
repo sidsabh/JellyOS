@@ -36,13 +36,12 @@ impl<T> Mutex<T> {
     // need any real synchronization.
     pub fn try_lock(&self) -> Option<MutexGuard<T>> {
         if is_mmu_ready() {
-            let this = getcpu();
             if !self
                 .lock
                 .swap(true, Ordering::Acquire)
-                || self.owner.load(Ordering::Acquire) == this
+                // || self.owner.load(Ordering::Acquire) == this // fix re-entrant maybe store owner in lock
             {
-                self.owner.store(this, Ordering::Release);
+                self.owner.store(getcpu(), Ordering::Release);
                 Some(MutexGuard { lock: &self })
             } else {
                 None
@@ -75,7 +74,7 @@ impl<T> Mutex<T> {
 
     fn unlock(&self) {
         if is_mmu_ready() {
-            putcpu(self.owner.load(Ordering::Acquire));
+            putcpu(self.owner.load(Ordering::Relaxed));
             self.lock.store(false, Ordering::Release);
         } else {
             self.lock.store(false, Ordering::Relaxed);

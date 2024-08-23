@@ -119,6 +119,29 @@ vec_context_restore:
 
     ret
 
+
+.global idle_context_restore
+idle_context_restore:
+    
+    ldp x1, x2, [x0], #16
+    msr ELR_EL1, x1
+    msr SPSR_EL1, x2
+
+    ldp x1, x2, [x0], #16
+    msr SP_EL0, x1
+    msr TPIDR_EL0, x2
+
+    ldp x1, x2, [x0], #16
+    msr TTBR0_EL1, x1
+    msr TTBR1_EL1, x2
+
+    dsb     ishst
+    tlbi    vmalle1
+    dsb     ish
+    isb
+
+    ret
+
 // pair instructions ensure stack alignment of 16
 .macro HANDLER source, kind
     .align 7

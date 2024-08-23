@@ -44,9 +44,9 @@ impl Process {
         let stack = Stack::new().ok_or(OsError::NoMemory)?;
         let state = State::Ready;
 
-        let kpt = UserPageTable::new();
+        let upt = UserPageTable::new();
         
-        let vmap = Box::new(kpt);
+        let vmap = Box::new(upt);
 
         let p = Process {
             context,

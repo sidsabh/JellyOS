@@ -5,6 +5,8 @@ MNT=mnt
 PROGS=(sleep fib echo)
 CACHE=cache
 
+rm fs.img
+
 # Create the image file
 dd if=/dev/zero of=$IMG bs=1m count=128
 

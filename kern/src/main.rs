@@ -89,13 +89,13 @@ unsafe fn kmain() -> ! {
     FILESYSTEM.initialize();
     VMM.initialize();
     init::initialize_app_cores();
+    SCHEDULER.initialize();
 
     per_core_main();
 }
 
 unsafe fn per_core_main() -> ! {
     VMM.wait();
-    SCHEDULER.initialize();
     VMM.setup();
     SCHEDULER.start();
 }

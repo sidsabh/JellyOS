@@ -1,7 +1,9 @@
 use alloc::boxed::Box;
 use alloc::collections::vec_deque::VecDeque;
 use alloc::vec::Vec;
+use pi::interrupt;
 
+use core::borrow::Borrow;
 use core::ffi::c_void;
 use core::fmt;
 use core::mem;
@@ -20,12 +22,14 @@ use crate::percore::{get_preemptive_counter, is_mmu_ready, local_irq};
 use crate::process::{Id, Process, State};
 use crate::traps::irq::IrqHandlerRegistry;
 use crate::traps::TrapFrame;
+use crate::vm::UserPageTable;
 use crate::GLOBAL_IRQ;
 use crate::{ETHERNET, USB};
 
 /// Process scheduler for the entire machine.
 #[derive(Debug)]
 pub struct GlobalScheduler(Mutex<Option<Box<Scheduler>>>);
+
 
 impl GlobalScheduler {
     /// Returns an uninitialized wrapper around a local scheduler.
@@ -94,33 +98,32 @@ impl GlobalScheduler {
     /// preemptive scheduling. This method should not return under normal conditions.
     pub fn start(&'static self) -> ! {
         // register handler fn for timer
-        self.initialize_global_timer_interrupt();
+        if aarch64::affinity() == 0 {
+            self.initialize_global_timer_interrupt();
+        }
+        self.initialize_local_timer_interrupt();
 
-        // run first
-        let mut p = Process::new().expect("failed to make process");
-        p.context.pc = USER_IMG_BASE as *const () as *const u64 as u64;
-        p.context.sp = p.stack.top().as_u64();
+        let mut tf = Box::new(TrapFrame::default());
+        tf.sp = Process::get_stack_top().as_u64();
+        tf.pc = Process::get_image_base().as_u64();
         let mut pstate = PState::new(0);
         pstate.set_value(0b1_u64, PState::F);
         pstate.set_value(0b1_u64, PState::A);
         pstate.set_value(0b1_u64, PState::D);
-        p.context.pstate = pstate.get();
-        p.context.ttbr0_el1 = crate::VMM.get_baddr().as_u64();
-        p.context.ttbr1_el1 = p.vmap.get_baddr().as_u64();
-        self.test_phase_3(&mut p, idle_proc as *const u8);
-
-        let frame_addr = p.context.as_ref() as *const TrapFrame as *const u64 as u64;
+        tf.pstate = pstate.get();
+        tf.tpidr = u64::MAX;
+        tf.ttbr0_el1 = crate::VMM.get_baddr().as_u64();
+        let upt = crate::vm::UserPageTable::new();
+        let mut vmap = Box::new(upt);
+        tf.ttbr1_el1 = vmap.get_baddr().as_u64();
+        self.load_code(&mut vmap, idle_proc as *const u8);
+        let frame_addr = tf.as_ref() as *const TrapFrame as *const u64 as u64;
 
         unsafe {
             asm!(
-                "mov SP, {context:x}",
-                "bl vec_context_restore",
-                "adr x0, _start",
-                "add SP, x0, {page_size}",
-                "mov x0, xzr",
-                "mov x1, {context:x}",
+                "mov x0, {context:x}",
+                "bl idle_context_restore",
                 "eret",
-                page_size = in(reg) PAGE_SIZE,
                 context = in(reg) frame_addr,
             );
         }
@@ -136,14 +139,20 @@ impl GlobalScheduler {
     /// Registers a timer handler with `Usb::start_kernel_timer` which will
     /// invoke `poll_ethernet` after 1 second.
     pub fn initialize_global_timer_interrupt(&'static self) {
+    }
+
+    /// Initializes the per-core local timer interrupt with `pi::local_interrupt`.
+    /// The timer should be configured in a way that `CntpnsIrq` interrupt fires
+    /// every `TICK` duration, which is defined in `param.rs`.
+    pub fn initialize_local_timer_interrupt(&'static self) {
+        // Lab 5 2.C
         use crate::IRQ;
         use pi::interrupt::Interrupt;
-        GLOBAL_IRQ.register(
-            Interrupt::Timer1,
+        IRQ.register(
+            LocalInterrupt::CntPnsIrq,
             Box::new(|tf: &mut TrapFrame| {
-
                 // tf was the interrupted processes' trap frame
-                pi::timer::tick_in(crate::param::TICK);
+                pi::local_interrupt::local_tick_in(aarch64::affinity(), crate::param::TICK);
                 self.switch(State::Ready, tf); // context switch
 
                 // kprintln!("interrupt");
@@ -161,25 +170,17 @@ impl GlobalScheduler {
         );
 
         // enable timer interrupts
-        pi::interrupt::Controller::new().enable(Interrupt::Timer1);
+        pi::local_interrupt::LocalController::new(aarch64::affinity()).enable_local_timer();
 
         // set timer interupt
-        pi::timer::tick_in(crate::param::TICK);
-    }
-
-    /// Initializes the per-core local timer interrupt with `pi::local_interrupt`.
-    /// The timer should be configured in a way that `CntpnsIrq` interrupt fires
-    /// every `TICK` duration, which is defined in `param.rs`.
-    pub fn initialize_local_timer_interrupt(&self) {
-        // Lab 5 2.C
-        unimplemented!("initialize_local_timer_interrupt()")
+        pi::local_interrupt::local_tick_in(aarch64::affinity(), crate::param::TICK);
     }
 
     /// Initializes the scheduler and add userspace processes to the Scheduler.
     pub unsafe fn initialize(&self) {
         *self.0.lock() = Some(Box::new(Scheduler::new()));
 
-        for _ in 0..10 {
+        for _ in 0..4*NCORES {
             // self.add(Process::load(Path::new("/programs/sleep.bin")).expect("failed to load sleep proc"));
             use shim::path::Path;
             self.add(
@@ -192,11 +193,10 @@ impl GlobalScheduler {
     //
     // * A method to load a extern function to the user process's page table.
     //
-    pub fn test_phase_3(&self, proc: &mut Process, f: *const u8) {
+    pub fn load_code(&self, vmap: &mut Box<UserPageTable>, f: *const u8) {
         use crate::vm::{PagePerm, VirtualAddr};
 
-        let page: &mut [u8] = proc
-            .vmap
+        let page: &mut [u8] = vmap
             .alloc(VirtualAddr::from(USER_IMG_BASE as u64), PagePerm::RWX);
 
         let text: &[u8] = unsafe { core::slice::from_raw_parts(f, 100) };

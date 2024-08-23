@@ -112,11 +112,6 @@ impl VMManager {
 
         while self.ready_core_cnt.load(Ordering::Relaxed) != crate::param::NCORES {}
 
-        loop {
-            pi::timer::spin_sleep(Duration::from_millis(1000));
-            info!("hey this is core {} and I hope you have an awesome day!", aarch64::affinity());
-        }
-
     }
 
     /// Returns the base address of the kernel page table as `PhysicalAddr`.

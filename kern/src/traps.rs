@@ -7,10 +7,10 @@ use crate::console::kprintln;
 
 pub use self::frame::TrapFrame;
 
-use aarch64::current_el;
+use crate::GLOBAL_IRQ;
+use aarch64::{affinity, current_el};
 use pi::interrupt::{Controller, Interrupt};
 use pi::local_interrupt::{LocalController, LocalInterrupt};
-use crate::GLOBAL_IRQ;
 
 use self::syndrome::Syndrome;
 use self::syscall::handle_syscall;
@@ -49,10 +49,10 @@ use crate::{shell, IRQ};
 #[no_mangle]
 pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
     match info.kind {
-        Kind::Synchronous if let Syndrome::Svc(num) =  Syndrome::from(esr) => {
+        Kind::Synchronous if let Syndrome::Svc(num) = Syndrome::from(esr) => {
             // kprintln!("tf: {:#?}", tf);
             handle_syscall(num, tf);
-        },
+        }
         Kind::Synchronous => {
             // kprintln!("{:#?}, {}, {:#?}", info, esr, Syndrome::from(esr));
             // Preferred Exception Return Address for synchronous
@@ -60,16 +60,37 @@ pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
             tf.pc += 4;
         }
         Kind::Irq => {
-            let controller = Controller::new();
-            for i in Interrupt::iter() {
-                if controller.is_pending(i) {
-                    // kprintln!("{:#?}, idx:{:#?} ", info, Interrupt::to_index(*i));
-                    GLOBAL_IRQ.invoke(i, tf);
-                    break;
+            let mut handled = false;
+
+            let global_controller = Controller::new();
+            if affinity() == 0 {
+                for i in Interrupt::iter() {
+                    if global_controller.is_pending(i) {
+                        // kprintln!("{:#?}, idx:{:#?} ", info, i);
+                        GLOBAL_IRQ.invoke(i, tf);
+                        handled = true;
+                        break;
+                    }
                 }
             }
+
+            if !handled {
+                let local_controller = LocalController::new(affinity());
+                for i in LocalInterrupt::iter() {
+                    if local_controller.is_pending(i) {
+                        // kprintln!("{:#?}, idx:{:#?} ", info, i);
+                        IRQ.invoke(i, tf);
+                        handled = true;
+                        break;
+                    }
+                }
+            }
+
+            if !handled {
+                panic!("interrupt not handled");
+            }
         }
-        Kind::Fiq => {},
-        Kind::SError => {},
+        Kind::Fiq => {}
+        Kind::SError => {}
     }
 }

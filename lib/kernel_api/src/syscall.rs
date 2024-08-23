@@ -1,4 +1,4 @@
-use core::fmt;
+use core::{fmt, str};
 use core::fmt::Write;
 use core::time::Duration;
 
@@ -100,6 +100,27 @@ pub fn write(b: u8) {
     let _ = OsError::from(ecode);
 }
 
+pub fn write_str(msg: &str, len: usize) {
+    let mut ecode: u64;
+
+    unsafe {
+        asm!(
+            "mov x0, {str_addr:x}",
+            "mov x1, {str_len:x}",
+            "svc {nr_write_str}",
+            "mov {ecode}, x7",
+            str_addr = in(reg) msg as *const str as *const usize as usize,
+            str_len = in(reg) len,
+            nr_write_str = const NR_WRITE_STR,
+            ecode = out(reg) ecode,
+            out("x7") _,   // Clobbers x0
+            options(nostack),
+        );
+    }
+
+    let _ = OsError::from(ecode);
+}
+
 pub fn getpid() -> u64 {
     let mut ecode: u64;
     let mut pid: u64;
@@ -153,6 +174,7 @@ pub fn sock_recv(descriptor: SocketDescriptor, buf: &mut [u8]) -> OsResult<usize
     unimplemented!("sock_recv")
 }
 
+
 struct Console;
 
 impl fmt::Write for Console {
@@ -160,10 +182,11 @@ impl fmt::Write for Console {
         for b in s.bytes() {
             write(b);
         }
+        // write_str(s, s.len());
+
         Ok(())
     }
 }
-
 
 #[macro_export]
 macro_rules! print {

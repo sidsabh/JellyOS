@@ -93,6 +93,9 @@ pub fn handle_syscall(num: u16, tf: &mut TrapFrame) {
         NR_GETPID => {
             sys_getpid(tf);
         },
+        NR_WRITE_STR => {
+            sys_write_str(tf.regs[0] as usize, tf.regs[1] as usize, tf)
+        }
         _ => {
             panic!("unimplemented syscall");
         }
