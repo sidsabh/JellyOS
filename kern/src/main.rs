@@ -42,6 +42,7 @@ use fs::FileSystem;
 use net::uspi::Usb;
 use net::GlobalEthernetDriver;
 use process::GlobalScheduler;
+use shell::shell;
 use traps::irq::{Fiq, GlobalIrq, LocalIrq};
 use vm::VMManager;
 
