@@ -1,5 +1,4 @@
 #![no_std]
-#![feature(const_refs_to_static)]
 use core::ptr::addr_of;
 use core::mem::zeroed;
 use core::panic::PanicInfo;
@@ -49,10 +48,10 @@ extern "Rust" {
 #[no_mangle]
 pub unsafe extern "C" fn _start() -> ! {
     zeros_bss();
-    let (start, end) = memory_map();
-    println!("heap beg: {:016x}, end: {:016x}", start, end);
-    ALLOCATOR.initialize(start, end);
-    main();
+    //let (start, end) = memory_map();
+    //println!("heap beg: {:016x}, end: {:016x}", start, end);
+    //ALLOCATOR.initialize(start, end);
+    //main();
     kernel_api::syscall::exit();
 }
 

@@ -371,15 +371,3 @@ extern "C" fn idle_proc() {
     }
 }
 
-extern "C" fn proc1() {
-    shell::shell("tty0");
-}
-
-extern "C" fn proc2() {
-    let mut ctr: i32 = 0;
-    loop {
-        kprintln!("proc2 here with {}", ctr);
-        ctr += 1;
-        pi::timer::spin_sleep(Duration::from_secs(1));
-    }
-}
