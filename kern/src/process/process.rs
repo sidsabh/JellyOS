@@ -109,8 +109,8 @@ impl Process {
         }
 
 
-        // alloc some pages for user heap and bss
-        let user_heap_pages = 3;
+        // alloc some pages for user heap
+        let user_heap_pages = 2;
         for idx in (page_nums)..(page_nums+user_heap_pages) {
             p.vmap.alloc(VirtualAddr::from(Process::get_image_base().as_usize()+PAGE_SIZE*idx), PagePerm::RWX);
         }
