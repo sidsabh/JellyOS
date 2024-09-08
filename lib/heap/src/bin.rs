@@ -5,10 +5,10 @@ use crate::util::*;
 use crate::LocalAlloc;
 
 /// A simple allocator that allocates based on size classes.
-///   bin 0 (2^3 bytes)    : handles allocations in (0, 2^3]
-///   bin 1 (2^4 bytes)    : handles allocations in (2^3, 2^4]
+///   bin 0    : handles allocations in (0, 2^5]
+///   bin 1    : handles allocations in (2^5, 2^6]
 ///   ...
-///   bin 29 (2^22 bytes): handles allocations in (2^31, 2^32]
+///   bin 27    : handles allocations in (2^31, 2^32]
 ///   
 ///   map_to_bin(size) -> k
 ///   
@@ -17,7 +17,7 @@ use crate::LocalAlloc;
 pub struct Allocator {
     current: usize,
     end: usize,
-    bins: [LinkedList; 64 - 5],
+    bins: [LinkedList; 32 - 4],
 }
 
 impl Allocator {
@@ -27,7 +27,7 @@ impl Allocator {
         Allocator {
             current: start,
             end,
-            bins: [LinkedList::new(); 64 - 5],
+            bins: [LinkedList::new(); 32 - 4],
         }
     }
 }
@@ -57,7 +57,9 @@ impl LocalAlloc for Allocator {
     /// or `layout` does not meet this allocator's
     /// size or alignment constraints.
     unsafe fn alloc(&mut self, layout: Layout) -> *mut u8 {
-        let idx: usize = max(0, layout.size().ilog2() as i32 - 5) as usize; // ilog2(sizeof(usize)) == 5
+        
+        assert!(layout.size() > 0, "Layout size must be greater than 0");
+        let idx: usize = max(0, (layout.size()-1).ilog2() as i32 - 5) as usize; // ilog2(sizeof(usize)) == 5
         match self.bins[idx]
             .iter_mut()
             .find(|x| ((x.value() as usize) % layout.align()) == 0)
@@ -91,7 +93,8 @@ impl LocalAlloc for Allocator {
     /// Parameters not meeting these conditions may result in undefined
     /// behavior.
     unsafe fn dealloc(&mut self, ptr: *mut u8, layout: Layout) {
-        let idx: usize = layout.size().ilog2().saturating_sub(5) as usize;
+        assert!(layout.size() > 0, "Layout size must be greater than 0");
+        let idx: usize = max(0, (layout.size()-1).ilog2() as i32 - 5) as usize; // ilog2(sizeof(usize)) == 5
         //                                                                     // FML
         //                                                                     // `LinkedList` guarantees that the passed in pointer refers to valid, unique,
         //                                                                     // writeable memory at least `usize` in size.

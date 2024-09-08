@@ -127,10 +127,10 @@ pub fn getpid() -> u64 {
 
     unsafe {
         asm!(
-            "svc {nr_time}",
+            "svc {nr_getpid}",
             "mov {pid}, x0",
             "mov {ecode}, x7",
-            nr_time = const NR_TIME,
+            nr_getpid = const NR_GETPID,
             pid = out(reg) pid,
             ecode = out(reg) ecode,
             out("x0") _,   // Clobbers x0

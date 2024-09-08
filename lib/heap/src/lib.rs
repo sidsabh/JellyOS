@@ -17,8 +17,9 @@ use core::alloc::{GlobalAlloc, Layout};
 use core::fmt;
 
 
-use spin::Mutex;
-
+pub trait MutexTrait<T> {
+    fn lock(&self) -> &mut T;
+}
 /// `LocalAlloc` is an analogous trait to the standard library's `GlobalAlloc`,
 /// but it takes `&mut self` in `alloc()` and `dealloc()`.
 pub trait LocalAlloc {
@@ -27,15 +28,20 @@ pub trait LocalAlloc {
 }
 
 /// Thread-safe (locking) wrapper around a particular memory allocator.
-pub struct Allocator(Mutex<Option<AllocatorImpl>>);
 
-impl Allocator {
+pub struct Allocator<M: MutexTrait<Option<AllocatorImpl>>> {
+    inner: M,
+}
+
+impl<M: MutexTrait<Option<AllocatorImpl>>> Allocator<M> {
     /// Returns an uninitialized `Allocator`.
     ///
     /// The allocator must be initialized by calling `initialize()` before the
-    /// first memory allocation. Failure to do will result in panics.
-    pub const fn uninitialized() -> Self {
-        Allocator(Mutex::new(None))
+    /// first memory allocation. Failure to do so will result in panics.
+    pub const fn uninitialized(mutex: M) -> Self {
+        Allocator {
+            inner: mutex,
+        }
     }
 
     /// Initializes the memory allocator.
@@ -46,16 +52,15 @@ impl Allocator {
     ///
     /// Panics if the system's memory map could not be retrieved.
     pub unsafe fn initialize(&self, start: usize, end: usize) {
-        *self.0.lock() = Some(AllocatorImpl::new(start, end));
+        *self.inner.lock() = Some(AllocatorImpl::new(start, end));
     }
 }
 
-unsafe impl GlobalAlloc for Allocator {
+unsafe impl<M: MutexTrait<Option<AllocatorImpl>>> GlobalAlloc for Allocator<M> {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        // kprintln!("allocing: {}  bytes", layout.size());
         let aligned_layout = Layout::from_size_align(layout.size(), layout.align().max(4))
             .expect("Invalid layout for allocation");
-        self.0
+        self.inner
             .lock()
             .as_mut()
             .expect("allocator uninitialized")
@@ -63,10 +68,9 @@ unsafe impl GlobalAlloc for Allocator {
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        // kprintln!("deallocing: {}  bytes", layout.size());
         let aligned_layout = Layout::from_size_align(layout.size(), layout.align().max(4))
             .expect("Invalid layout for deallocation");
-        self.0
+        self.inner
             .lock()
             .as_mut()
             .expect("allocator uninitialized")
@@ -74,10 +78,9 @@ unsafe impl GlobalAlloc for Allocator {
     }
 }
 
-
-impl fmt::Debug for Allocator {
+impl<M: MutexTrait<Option<AllocatorImpl>>> fmt::Debug for Allocator<M> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.0.lock().as_mut() {
+        match self.inner.lock().as_mut() {
             Some(ref alloc) => {
                 write!(f, "{:?}", alloc)?;
             }
@@ -86,3 +89,4 @@ impl fmt::Debug for Allocator {
         Ok(())
     }
 }
+

@@ -13,6 +13,7 @@ use aarch64::*;
 use pi::local_interrupt::LocalInterrupt;
 use smoltcp::time::Instant;
 
+use crate::console::kprint;
 use crate::console::kprintln;
 use crate::mutex::Mutex;
 use crate::net::uspi::TKernelTimerHandle;
@@ -180,12 +181,10 @@ impl GlobalScheduler {
     pub unsafe fn initialize(&self) {
         *self.0.lock() = Some(Box::new(Scheduler::new()));
 
-        for _ in 0..NCORES*4 {
-            // self.add(Process::load(Path::new("/programs/sleep.bin")).expect("failed to load sleep proc"));
+        for _ in 0..NCORES*2 {
             use shim::path::Path;
-            self.add(
-                Process::load(Path::new("/programs/fib.bin")).expect("failed to load sleep proc"),
-            );
+            let p = Process::load(Path::new("/programs/fib.bin")).expect("failed to load fib proc");
+            self.add(p);
         }
     }
 
@@ -236,6 +235,7 @@ impl Scheduler {
     /// is called, that process is executing on the CPU.
     fn add(&mut self, mut process: Process) -> Option<Id> {
         let new_id = self.processes.len() as u64;
+        //kprint!("{}", self.processes.len());
 
         process.context.tpidr = new_id;
         self.processes.push_back(process);
