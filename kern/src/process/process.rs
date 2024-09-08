@@ -101,10 +101,18 @@ impl Process {
         file.read_to_end(&mut data)?;
 
         let data_pages = data.chunks(PAGE_SIZE);
+        let page_nums = data_pages.len();
 
         for (idx, data_page) in data_pages.enumerate() {
             let page = p.vmap.alloc(VirtualAddr::from(Process::get_image_base().as_usize()+PAGE_SIZE*idx), PagePerm::RWX);
             page[..data_page.len()].copy_from_slice(data_page);
+        }
+
+
+        // alloc some pages for user heap and bss
+        let user_heap_pages = 3;
+        for idx in (page_nums)..(page_nums+user_heap_pages) {
+            p.vmap.alloc(VirtualAddr::from(Process::get_image_base().as_usize()+PAGE_SIZE*idx), PagePerm::RWX);
         }
 
         Ok(p)

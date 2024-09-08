@@ -17,7 +17,8 @@ SECTIONS {
     *(.data .data.* .gnu.linkonce.d*)
   }
 
-  .bss (NOLOAD) : {
+    /* load bss so we can directly map virtual memory */
+  .bss : {
     . = ALIGN(32);
     __bss_beg = .;
     *(.bss .bss.*)
