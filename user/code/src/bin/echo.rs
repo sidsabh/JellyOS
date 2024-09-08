@@ -1,15 +1,12 @@
-#![feature(asm)]
 #![feature(never_type)]
 #![no_std]
 #![no_main]
 
-mod cr0;
+use user::*;
 
-use core::time::Duration;
+use kernel_api::OsResult;
 
-use kernel_api::syscall::*;
-use kernel_api::{print, println, OsResult};
-
+#[no_mangle]
 fn main() {
     let result = main_inner();
     if let Err(error) = result {

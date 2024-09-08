@@ -1,8 +1,6 @@
 use aarch64::*;
 
-use core::arch::asm;
 use core::arch::global_asm;
-use core::fmt::write;
 use core::mem::zeroed;
 use core::ptr::addr_of;
 use core::ptr::write_volatile;
@@ -10,13 +8,12 @@ use core::ptr::write_volatile;
 mod oom;
 mod panic;
 
-use crate::console::kprint;
 use crate::console::kprintln;
 use crate::kmain;
 use crate::param::*;
 use crate::per_core_main;
-use crate::shell;
-use crate::VMM;
+use pi::timer::spin_sleep;
+use core::time::Duration;
 
 global_asm!(include_str!("init/vectors.s"));
 
@@ -38,6 +35,8 @@ pub unsafe extern "C" fn _start() -> ! {
     loop {}
 }
 
+// symbol table has vars pointing to bss
+// take bss_beg, _end labels from linker (.ld) and manually set to 0
 #[allow(static_mut_refs)]
 unsafe fn zeros_bss() {
     extern "C" {
@@ -74,21 +73,6 @@ unsafe fn switch_to_el2() {
 }
 
 
-// asm_switch_to_el2:
-//     // switch to EL2 if we're in EL3. otherwise switch to EL1
-//     cmp     x0, 0b11            // EL3
-//     bne     switch_to_el1
-
-//     // set-up SCR_EL3 (bits 0, 4, 5, 7, 8, 10) (A53: 4.3.42)
-//     mov     x2, #0x5b1
-//     msr     SCR_EL3, x2
-
-//     // set-up SPSR and PL switch! (bits 0, 3, 6, 7, 8, 9) (ref: C5.2.20)
-//     mov     x2, #0x3c9
-//     msr     SPSR_EL3, x2
-//     adr     x2, switch_to_el1
-//     msr     ELR_EL3, x2
-//     eret
 #[no_mangle]
 unsafe fn switch_to_el1() {
     extern "C" {
@@ -133,13 +117,12 @@ unsafe fn switch_to_el1() {
 
 #[no_mangle]
 unsafe fn kinit() -> ! {
-    use pi::timer::spin_sleep;
-    use core::time::Duration;
     spin_sleep(Duration::from_millis(500)); // necessary delay after transmit before tty
-    kprintln!("{:x}", SP.get());
-    kprintln!("{:x}", current_el());
-
+    kprintln!("What just happened? Why am I here?");
+    kprintln!("Discovering my identity and features!");
+    kprintln!("Initial Exception Level: {:x}", current_el());    
     zeros_bss();
+
     switch_to_el2();
     switch_to_el1();
     kmain();

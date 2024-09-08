@@ -2,8 +2,8 @@
 #![no_std]
 
 use core::fmt;
-
 use shim::io;
+extern crate alloc;
 
 #[cfg(feature = "user-space")]
 pub mod syscall;

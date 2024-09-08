@@ -181,7 +181,7 @@ impl GlobalScheduler {
     pub unsafe fn initialize(&self) {
         *self.0.lock() = Some(Box::new(Scheduler::new()));
 
-        for _ in 0..4*NCORES {
+        for _ in 0..NCORES {
             // self.add(Process::load(Path::new("/programs/sleep.bin")).expect("failed to load sleep proc"));
             use shim::path::Path;
             self.add(

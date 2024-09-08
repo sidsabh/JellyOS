@@ -1,14 +1,8 @@
-#![feature(asm)]
 #![no_std]
 #![no_main]
-mod cr0;
+use user::*;
 
-extern crate alloc;
-
-use kernel_api::*;
 use kernel_api::syscall::*;
-use crate::alloc::string::*;
-use crate::alloc::format;
 
 fn fib(n: u64) -> u64 {
     match n {
@@ -18,12 +12,13 @@ fn fib(n: u64) -> u64 {
     }
 }
 
+#[no_mangle]
 fn main() {
     let pid = getpid();
     let beg = time();
-    // print!("{}", format!("[{:02}] Started: {:?}\n", pid, beg));
+    // println!("[{:02}] Started: {:?}", pid, beg);
     let rtn = fib(40);
     let end = time();
     // print!("{}", format!("[{:02}] Ended: {:?}\n", pid, end));
-    print!("{}", format!("[{:02}] Result: {} ({:?})\n", pid, rtn, end - beg));
+    println!("[{:02}] Result: {} ({:?})", pid, rtn, end - beg);
 }

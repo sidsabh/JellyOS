@@ -81,9 +81,9 @@ unsafe fn log_layout() {
     );
 }
 
+/// bootstrapping core
 unsafe fn kmain() -> ! {
 
-    // bootstrapping core
     spin_sleep(Duration::from_millis(500)); // necessary delay after transmit before tty
     log_layout();
     ALLOCATOR.initialize();
@@ -97,6 +97,5 @@ unsafe fn kmain() -> ! {
 
 unsafe fn per_core_main() -> ! {
     VMM.wait();
-    VMM.setup();
     SCHEDULER.start();
 }

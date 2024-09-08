@@ -175,34 +175,3 @@ pub fn sock_recv(descriptor: SocketDescriptor, buf: &mut [u8]) -> OsResult<usize
 }
 
 
-struct Console;
-
-impl fmt::Write for Console {
-    fn write_str(&mut self, s: &str) -> fmt::Result {
-        // for b in s.bytes() {
-        //     write(b);
-        // }
-        write_str(s);
-
-        Ok(())
-    }
-}
-
-#[macro_export]
-macro_rules! print {
-    ($($arg:tt)*) => ($crate::syscall::vprint(format_args!($($arg)*)));
-}
-
-#[macro_export]
-macro_rules! println {
- () => (print!("\n"));
-    ($($arg:tt)*) => ({
-        $crate::syscall::vprint(format_args!($($arg)*));
-        $crate::print!("\n");
-    })
-}
-
-pub fn vprint(args: fmt::Arguments) {
-    let mut c = Console;
-    c.write_fmt(args).unwrap();
-}

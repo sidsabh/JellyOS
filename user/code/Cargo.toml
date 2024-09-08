@@ -10,14 +10,16 @@ authors = [
 ]
 edition = "2021"
 
-[package.metadata.cargo-xbuild]
-memcpy = true
+[lib]
+name = "user"
+path = "src/lib.rs"
+crate-type = ["lib"] 
+
+[profile.release]
+panic = "abort"
 
 [dependencies]
 aarch64 = { path = "../../lib/aarch64/" }
 kernel_api = { path = "../../lib/kernel_api" }
 shim = { path = "../../lib/shim", features = ["no_std", "alloc"] }
 
-
-[dev-dependencies]
-shim = { path = "../../lib/shim", features = ["alloc"]}

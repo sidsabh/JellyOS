@@ -2,40 +2,42 @@
 
 IMG=fs.img
 MNT=mnt
-PROGS=(sleep fib echo)
 CACHE=cache
+PROGS=($(ls code/build/*.bin | xargs -n 1 basename | sed 's/.bin//'))
 
-rm fs.img
+# Remove existing image
+rm -f $IMG
 
 # Create the image file
 dd if=/dev/zero of=$IMG bs=1m count=128
 
-# Attach the image
-DEVICE=$(hdiutil attach -imagekey diskimage-class=CRawDiskImage -nomount $IMG | tr -d '[:space:]')
+# Attach the image and capture the device
+DEVICE=$(hdiutil attach -imagekey diskimage-class=CRawDiskImage -nomount $IMG | awk '{print $1}' | tr -d '[:space:]')
 
-# Now appending 's1' should not introduce unexpected spaces
+echo "Attached device: $DEVICE"
+
+# Ensure cleanup on exit
+trap "sudo umount $MNT; hdiutil detach $DEVICE; rm -rf $MNT" EXIT
 
 # Partition the disk and format it as FAT32
 diskutil partitionDisk $DEVICE 1 MBR FAT32 "PARTITION" R
 
-PARTITION="${DEVICE}s1"
-
-sudo diskutil unmount $PARTITION
-
-mkdir -p $CACHE
 # Mount the partition
+PARTITION="${DEVICE}s1"
+sudo diskutil unmount $PARTITION
 mkdir -p $MNT
 sudo mount -t msdos $PARTITION $MNT
-    
-# Ensure cleanup on exit
-trap "sudo umount $MNT; hdiutil detach $(echo $DEVICE | head -n 1 | awk '{print $1}')" EXIT
+
+# Create the cache directory
+mkdir -p $CACHE
 
 # Create the programs directory on the mounted partition
 mkdir -p $MNT/programs
 
-# Copy the binaries to the mounted partition
-for d in ${PROGS[@]}; do
-    make -C $d
-    sudo cp $d/build/$d.bin $CACHE/$d.bin
-    sudo cp $CACHE/$d.bin $MNT/programs/$d.bin
+# Build the binaries and copy them to the mounted partition
+make -C code
+for prog in "${PROGS[@]}"; do
+    echo "Copying $prog.bin to $MNT/programs/"
+    sudo cp code/build/$prog.bin $CACHE/$prog.bin
+    sudo cp $CACHE/$prog.bin $MNT/programs/$prog.bin
 done
