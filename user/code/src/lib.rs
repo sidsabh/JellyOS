@@ -11,6 +11,8 @@ pub mod console;
 
 pub extern crate alloc;
 
+use allocator::{ALLOCATOR, memory_map};
+
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
     loop {}
@@ -47,6 +49,9 @@ extern "Rust" {
 #[no_mangle]
 pub unsafe extern "C" fn _start() -> ! {
     zeros_bss();
+    let (start, end) = memory_map();
+    println!("heap beg: {:016x}, end: {:016x}", start, end);
+    ALLOCATOR.initialize(start, end);
     main();
     kernel_api::syscall::exit();
 }

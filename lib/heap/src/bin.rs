@@ -1,8 +1,8 @@
 use core::alloc::Layout;
 
-use crate::allocator::linked_list::LinkedList;
-use crate::allocator::util::*;
-use crate::allocator::LocalAlloc;
+use crate::linked_list::LinkedList;
+use crate::util::*;
+use crate::LocalAlloc;
 
 /// A simple allocator that allocates based on size classes.
 ///   bin 0 (2^3 bytes)    : handles allocations in (0, 2^3]

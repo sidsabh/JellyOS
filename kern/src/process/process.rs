@@ -32,7 +32,7 @@ pub struct Process {
     // pub sockets: Vec<SocketHandle>,
 }
 use kernel_api::{OsResult, OsError};
-use crate::allocator::align_down;
+use crate::align_down;
 impl Process {
     /// Creates a new process with a zeroed `TrapFrame` (the default), a zeroed
     /// stack of the default size, and a state of `Ready`.

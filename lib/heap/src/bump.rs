@@ -1,7 +1,7 @@
 use core::alloc::Layout;
 
-use crate::allocator::util::*;
-use crate::allocator::LocalAlloc;
+use crate::util::*;
+use crate::LocalAlloc;
 
 /// A "bump" allocator: allocates memory by bumping a pointer; never frees.
 #[derive(Debug)]

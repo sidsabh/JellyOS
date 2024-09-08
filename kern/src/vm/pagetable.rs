@@ -6,7 +6,7 @@ use alloc::boxed::Box;
 use alloc::fmt;
 use core::alloc::{GlobalAlloc, Layout};
 
-use crate::allocator::{self, memory_map, Allocator};
+use crate::allocator::{self, memory_map };
 use crate::console::{kprint, kprintln};
 use crate::param::*;
 use crate::vm::{PhysicalAddr, VirtualAddr};

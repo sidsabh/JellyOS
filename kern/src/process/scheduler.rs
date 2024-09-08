@@ -13,7 +13,6 @@ use aarch64::*;
 use pi::local_interrupt::LocalInterrupt;
 use smoltcp::time::Instant;
 
-use crate::allocator::align_down;
 use crate::console::kprintln;
 use crate::mutex::Mutex;
 use crate::net::uspi::TKernelTimerHandle;

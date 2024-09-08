@@ -1,5 +1,5 @@
 mod align_util {
-    use crate::allocator::util::{align_down, align_up};
+    use crate::util::{align_down, align_up};
 
     #[test]
     fn test_align_down() {
@@ -77,7 +77,7 @@ mod allocator {
 
     use core::alloc::Layout;
 
-    use crate::{allocator::{bin, bump, LocalAlloc}, console::kprint};
+    use crate::{bin, bump, LocalAlloc};
 
     macro_rules! test_allocators {
         (@$kind:ident, $name:ident, $mem:expr, |$info:pat_param| $block:expr) => {
@@ -294,7 +294,7 @@ mod allocator {
 }
 
 mod linked_list {
-    use crate::allocator::linked_list::LinkedList;
+    use crate::linked_list::LinkedList;
 
     #[test]
     fn example_1() {

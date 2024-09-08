@@ -1,55 +1,27 @@
-use core::alloc::GlobalAlloc;
-use core::alloc::Layout;
-use core::cell::UnsafeCell;
-const PAGE_SIZE : usize = 16 * 1024;
-const USER_IMG_BASE : usize = 0xffff_ffff_c000_0000;
+extern crate heap;
+use heap::Allocator;
+use heap::align_up;
 
-struct InnerAlloc(UnsafeCell<(usize, usize)>);
-
-use core::marker::{Send, Sync};
-unsafe impl Send for InnerAlloc {}
-
-unsafe impl Sync for InnerAlloc {}
-
-pub struct GlobalAllocator(InnerAlloc);
+#[global_allocator]
+pub static ALLOCATOR: Allocator = Allocator::uninitialized();
 
 extern "C" {
     static __text_end: u8;
 }
-//TODO: uninitialize then
-impl GlobalAllocator {
-    const fn new() -> Self {
-        unsafe {
-            return GlobalAllocator(InnerAlloc(UnsafeCell::new((USER_IMG_BASE+PAGE_SIZE*2, USER_IMG_BASE+PAGE_SIZE*4)))) 
-        }
-    }
-}
-
-unsafe impl GlobalAlloc for GlobalAllocator {
-    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        unsafe {
-            let (beg, end) = &mut *self.0.0.get();
-
-            if *beg & (layout.align() - 1) != 0 {
-                *beg = *beg & (!(layout.align() - 1)) + layout.align();
-            }
-
-            let location = *beg as *mut u8;
-            *beg += layout.size();
-
-            location
-        }
-    }
-
-    unsafe fn dealloc(&self, _ptr: *mut u8, _layout: Layout) {}
-}
-#[global_allocator]
-pub static ALLOCATOR: GlobalAllocator = GlobalAllocator::new();
+const PAGE_SIZE : usize = 16 * 1024;
+const USER_IMG_BASE : usize = 0xffff_ffff_c000_0000;
+const USER_HEAP_PAGES : usize = 2;
 
 
-pub unsafe fn get_data() -> usize {
-    let ga = &ALLOCATOR;
-    let (beg, end) = &mut *ga.0.0.get();
-    return *beg;
+/// Returns the (start address, end address) of the available memory on this
+/// system if it can be determined. If it cannot, `None` is returned.
+///
+/// This function is expected to return `Some` under all normal cirumstances.
+pub fn memory_map() -> (usize, usize) {
+    
+    let mut binary_end = unsafe { (&__text_end as *const u8) as usize };
+    binary_end = align_up(binary_end, PAGE_SIZE);
+
+    (binary_end, binary_end + USER_HEAP_PAGES*PAGE_SIZE)
 }
 

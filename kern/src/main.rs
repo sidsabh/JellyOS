@@ -37,7 +37,10 @@ pub mod shell;
 pub mod traps;
 pub mod vm;
 
-use allocator::Allocator;
+
+extern crate heap;
+use allocator::memory_map;
+pub use heap::{Allocator, align_up, align_down};
 use fs::FileSystem;
 use net::uspi::Usb;
 use net::GlobalEthernetDriver;
@@ -86,7 +89,9 @@ unsafe fn kmain() -> ! {
 
     spin_sleep(Duration::from_millis(500)); // necessary delay after transmit before tty
     log_layout();
-    ALLOCATOR.initialize();
+    let (start, end) = memory_map().expect("failed to get memory map");
+    info!("heap beg: {:016x}, end: {:016x}", start, end);
+    ALLOCATOR.initialize(start, end);
     FILESYSTEM.initialize();
     VMM.initialize();
     init::initialize_app_cores();
