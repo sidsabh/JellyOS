@@ -1,4 +1,4 @@
-use aarch64::current_el;
+use aarch64::{affinity, current_el};
 use alloc::boxed::Box;
 use core::time::Duration;
 
@@ -50,8 +50,14 @@ pub fn sys_time(tf: &mut TrapFrame) {
 ///
 /// This system call does not take paramer and does not return any value.
 pub fn sys_exit(tf: &mut TrapFrame) {
-    let id = SCHEDULER.kill(tf).expect("failed to kill proc");
-    SCHEDULER.switch(State::Dead, tf);
+    let id = SCHEDULER.kill(tf).expect("failed to kill proc {}");
+    //kprintln!("killed proc {}", id);
+    assert!(id == tf.tpidr);
+    //kprintln!("{:#?}", SCHEDULER);
+    while SCHEDULER.switch_to(tf) == u64::MAX {
+        aarch64::wfi();
+    }
+    //kprintln!("tf: {:x}", tf.sp, tf.pc, tf.tpidr);
 }
 
 /// Writes to console.

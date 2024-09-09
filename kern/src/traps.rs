@@ -8,7 +8,7 @@ use crate::console::{kprint, kprintln};
 pub use self::frame::TrapFrame;
 
 use crate::GLOBAL_IRQ;
-use aarch64::{affinity, current_el};
+use aarch64::{affinity, current_el, FAR_EL1};
 use pi::interrupt::{Controller, Interrupt};
 use pi::local_interrupt::{LocalController, LocalInterrupt};
 
@@ -48,15 +48,24 @@ use crate::{shell, IRQ};
 /// the trap frame for the exception.
 #[no_mangle]
 pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
+    //kprintln!("info: {:#?}", info);
     match info.kind {
         Kind::Synchronous if let Syndrome::Svc(num) = Syndrome::from(esr) => {
             // kprintln!("tf: {:#?}", tf);
             handle_syscall(num, tf);
         }
         Kind::Synchronous => {
-            kprintln!("{:#?}, {}, {:#?}", info, esr, Syndrome::from(esr));
+            match Syndrome::from(esr) {
+                Syndrome::DataAbort { kind, level } => {
+                    unsafe {
+                        kprintln!("Fault addr: {:x}", FAR_EL1.get());
+                    }
+                },
+                _ => {}
+            }
             // Preferred Exception Return Address for synchronous
             // is the address of instr that generated exception
+            panic!("{:#?}, {}, {:#?}", info, esr, Syndrome::from(esr));
             tf.pc += 4;
         }
         Kind::Irq => {

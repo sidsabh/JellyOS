@@ -299,13 +299,12 @@ impl UserPageTable {
             panic!("allocator failed to allocate a page")
         };
 
-
         let mut entry = RawL3Entry::new(0);
         entry.set_value(EntryValid::Valid, RawL3Entry::VALID);
         entry.set_value(PageType::Page, RawL3Entry::TYPE);
         entry.set_value(EntryAttr::Mem, RawL3Entry::ATTR);
         entry.set_value(EntryPerm::USER_RW, RawL3Entry::AP); // use _perm ?
-        entry.set_value(EntrySh::OSh, RawL3Entry::SH);
+        entry.set_value(EntrySh::ISh, RawL3Entry::SH);
         entry.set_value(0b1_u64, RawL3Entry::AF);
         entry.set_masked(page as u64, RawL3Entry::ADDR);
 

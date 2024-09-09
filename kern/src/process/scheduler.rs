@@ -8,6 +8,7 @@ use core::ffi::c_void;
 use core::fmt;
 use core::mem;
 use core::time::Duration;
+use core::u64;
 
 use aarch64::*;
 use pi::local_interrupt::LocalInterrupt;
@@ -58,33 +59,41 @@ impl GlobalScheduler {
     /// restoring the next process's trap frame into `tf`. For more details, see
     /// the documentation on `Scheduler::schedule_out()` and `Scheduler::switch_to()`.
     pub fn switch(&self, new_state: State, tf: &mut TrapFrame) -> Id {
-        self.critical(|scheduler| scheduler.schedule_out(new_state, tf));
-        self.switch_to(tf)
+        let mut old_tf = tf.clone();
+        let id = self.switch_to(tf);
+        if id != u64::MAX {
+            self.critical(|scheduler| {
+                scheduler.schedule_out(new_state, &mut old_tf);
+            });
+        }
+        id
     }
 
-    /// Loops until it finds the next process to schedule.
-    /// Call `wfi()` in the loop when no process is ready.
+    /// Edited to fix deadlock
     /// For more details, see the documentation on `Scheduler::switch_to()`.
     ///
     /// Returns the process's ID when a ready process is found.
     pub fn switch_to(&self, tf: &mut TrapFrame) -> Id {
-        loop {
-            let rtn = self.critical(|scheduler| scheduler.switch_to(tf));
-            if let Some(id) = rtn {
-                trace!(
-                    "[core-{}] switch_to {:?}, pc: {:x}, lr: {:x}, x29: {:x}, x28: {:x}, x27: {:x}",
-                    affinity(),
-                    id,
-                    tf.pc,
-                    tf.regs[30],
-                    tf.regs[29],
-                    tf.regs[28],
-                    tf.regs[27]
-                );
-                return id;
-            }
-            aarch64::wfi();
+        let rtn = self.critical(|scheduler| scheduler.switch_to(tf));
+        if let Some(id) = rtn {
+            trace!(
+                "[core-{}] switch_to {:?}, pc: {:x}, lr: {:x}, x29: {:x}, x28: {:x}, x27: {:x}",
+                affinity(),
+                id,
+                tf.pc,
+                tf.regs[30],
+                tf.regs[29],
+                tf.regs[28],
+                tf.regs[27]
+            );
+            return id;
+        } else {
+            return u64::MAX;
         }
+            // problem: when a process ends or hasn't started (idle cores), they hold the IRQ lock
+            // causes live threads to not make progress since they get deadlocked on invoking the
+            // IRQ function
+            //aarch64::wfi();
     }
 
     /// Kills currently running process and returns that process's ID.
@@ -182,6 +191,7 @@ impl GlobalScheduler {
         *self.0.lock() = Some(Box::new(Scheduler::new()));
 
          for _ in 0..NCORES*2 {
+         //for _ in 0..2 {
             use shim::path::Path;
             let p = Process::load(Path::new("/programs/fib.bin")).expect("failed to load fib proc");
             self.add(p);
@@ -311,13 +321,13 @@ impl Scheduler {
 
     /// Finds a process corresponding with tpidr saved in a trap frame.
     /// Panics if the search fails.
-    pub fn find_process(&mut self, tf: &TrapFrame) -> &mut Process {
+    pub fn find_process(&mut self, tf: &TrapFrame) -> Option<&mut Process> {
         for i in 0..self.processes.len() {
             if self.processes[i].context.tpidr == tf.tpidr {
-                return &mut self.processes[i];
+                return Some(&mut self.processes[i]);
             }
         }
-        panic!("Invalid TrapFrame");
+        None
     }
 }
 

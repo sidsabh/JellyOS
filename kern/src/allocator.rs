@@ -39,24 +39,20 @@ impl Allocator {
 unsafe impl GlobalAlloc for Allocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         // kprintln!("allocing: {}  bytes", layout.size());
-        let aligned_layout = Layout::from_size_align(layout.size(), layout.align().max(4))
-            .expect("Invalid layout for allocation");
         self.0
             .lock()
             .as_mut()
             .expect("allocator uninitialized")
-            .alloc(aligned_layout)
+            .alloc(layout)
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         // kprintln!("deallocing: {}  bytes", layout.size());
-        let aligned_layout = Layout::from_size_align(layout.size(), layout.align().max(4))
-            .expect("Invalid layout for deallocation");
         self.0
             .lock()
             .as_mut()
             .expect("allocator uninitialized")
-            .dealloc(ptr, aligned_layout);
+            .dealloc(ptr, layout);
     }
 }
 

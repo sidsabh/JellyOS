@@ -129,13 +129,13 @@ where
 {
     /// Register an irq handler for an interrupt.
     fn register(&self, int: I, handler: IrqHandler) {
-        *self[int].borrow().lock() = Some(handler);
+	self.index(int).lock().replace(handler);
     }
 
     /// Executes an irq handler for the given interrupt.
     fn invoke(&self, int: I, tf: &mut TrapFrame) {
-        if let Some(func) = self[int].borrow().lock().as_mut() {
-            func(tf);
+         if let Some(handler) = self.index(int).lock().as_mut() {
+	    handler(tf);
         }
     }
 }

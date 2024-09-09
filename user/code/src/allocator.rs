@@ -9,6 +9,8 @@ use log::trace;
 use core::fmt;
 use spin::Mutex;
 
+use crate::uprintln;
+
 /// Thread-safe (locking) wrapper around a particular memory allocator.
 pub struct Allocator(Mutex<Option<AllocatorImpl>>);
 
@@ -29,17 +31,25 @@ impl Allocator {
     ///
     /// Panics if the system's memory map could not be retrieved.
     pub unsafe fn initialize(&self, start: usize, end: usize) {
+        for i in start..=end {
+            let ptr = i as *mut u8;
+            unsafe {
+                *ptr = 0;
+            }
+        }
         *self.0.lock() = Some(AllocatorImpl::new(start, end));
     }
 }
 
 unsafe impl GlobalAlloc for Allocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        self.0
+        let ptr = self.0
             .lock()
             .as_mut()
             .expect("allocator uninitialized")
-            .alloc(layout)
+            .alloc(layout);
+        // uprintln!("alloc {:x}, {:#?}", ptr as u64, aligned_layout);
+        ptr
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
@@ -48,6 +58,7 @@ unsafe impl GlobalAlloc for Allocator {
             .as_mut()
             .expect("allocator uninitialized")
             .dealloc(ptr, layout);
+        //uprintln!("dealloc {:x}, {:#?}", ptr as u64, aligned_layout);
     }
 }
 
