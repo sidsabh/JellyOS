@@ -42,6 +42,9 @@ dependencies = [
 [[package]]
 name = "heap"
 version = "0.1.0"
+dependencies = [
+ "spin",
+]
 
 [[package]]
 name = "kernel_api"

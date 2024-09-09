@@ -1,19 +1,70 @@
 extern crate heap;
-use heap::Allocator;
 use heap::align_up;
 
+use alloc::alloc::Layout;
+use alloc::alloc::GlobalAlloc;
+use heap::{AllocatorImpl, LocalAlloc};
+use log::info;
+use log::trace;
+use core::fmt;
 use spin::Mutex;
-use heap::MutexTrait;
 
+/// Thread-safe (locking) wrapper around a particular memory allocator.
+pub struct Allocator(Mutex<Option<AllocatorImpl>>);
 
-impl<T> MutexTrait<T> for Mutex<T> {
-    fn lock(&self) -> &mut T {
-        self.lock()
+impl Allocator {
+    /// Returns an uninitialized `Allocator`.
+    ///
+    /// The allocator must be initialized by calling `initialize()` before the
+    /// first memory allocation. Failure to do will result in panics.
+    pub const fn uninitialized() -> Self {
+        Allocator(Mutex::new(None))
+    }
+
+    /// Initializes the memory allocator.
+    /// The caller should assure that the method is invoked only once during the
+    /// kernel initialization.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the system's memory map could not be retrieved.
+    pub unsafe fn initialize(&self, start: usize, end: usize) {
+        *self.0.lock() = Some(AllocatorImpl::new(start, end));
     }
 }
 
+unsafe impl GlobalAlloc for Allocator {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        self.0
+            .lock()
+            .as_mut()
+            .expect("allocator uninitialized")
+            .alloc(layout)
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        self.0
+            .lock()
+            .as_mut()
+            .expect("allocator uninitialized")
+            .dealloc(ptr, layout);
+    }
+}
+
+
+impl fmt::Debug for Allocator {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.0.lock().as_mut() {
+            Some(ref alloc) => {
+                write!(f, "{:?}", alloc)?;
+            }
+            None => write!(f, "Not yet initialized")?,
+        }
+        Ok(())
+    }
+}
 #[global_allocator]
-pub static ALLOCATOR: Allocator<Mutex> = Allocator::uninitialized(Mutex::new(None));
+pub static ALLOCATOR: Allocator = Allocator::uninitialized();
 
 extern "C" {
     static __text_end: u8;

@@ -19,6 +19,5 @@ fn main() {
     println!("[{:02}] Started: {:?}", pid, beg);
     let rtn = fib(40);
     let end = time();
-
     println!("[{:02}] Result: {} ({:?})", pid, rtn, end - beg);
 }

@@ -160,7 +160,6 @@ idle_context_restore:
 .align 11
 .global vectors
 vectors:
-    // FIXME: Setup the 16 exception vectors.
     HANDLER 0, 0
     HANDLER 0, 1
     HANDLER 0, 2

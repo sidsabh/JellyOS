@@ -16,7 +16,6 @@
 #![feature(iter_chain)]
 #![feature(if_let_guard)] // experimental
 #![feature(array_chunks)] // experimental
-
 // #[cfg(not(test))] // commenting for rust-analyzer
 mod init;
 
@@ -40,7 +39,7 @@ pub mod vm;
 
 extern crate heap;
 use allocator::memory_map;
-pub use heap::{Allocator, align_up, align_down};
+use allocator::Allocator;
 use fs::FileSystem;
 use net::uspi::Usb;
 use net::GlobalEthernetDriver;
@@ -89,13 +88,11 @@ unsafe fn kmain() -> ! {
 
     spin_sleep(Duration::from_millis(500)); // necessary delay after transmit before tty
     log_layout();
-    let (start, end) = memory_map().expect("failed to get memory map");
-    info!("heap beg: {:016x}, end: {:016x}", start, end);
-    ALLOCATOR.initialize(start, end);
+    ALLOCATOR.initialize();
     FILESYSTEM.initialize();
     VMM.initialize();
-    init::initialize_app_cores();
     SCHEDULER.initialize();
+    init::initialize_app_cores();
 
     per_core_main();
 }

@@ -5,10 +5,10 @@ use crate::util::*;
 use crate::LocalAlloc;
 
 /// A simple allocator that allocates based on size classes.
-///   bin 0    : handles allocations in (0, 2^5]
-///   bin 1    : handles allocations in (2^5, 2^6]
+///   bin 0    : handles allocations in (0, 2^3]
+///   bin 1    : handles allocations in (2^3, 2^4]
 ///   ...
-///   bin 27    : handles allocations in (2^31, 2^32]
+///   bin 29    : handles allocations in (2^31, 2^32]
 ///   
 ///   map_to_bin(size) -> k
 ///   
@@ -17,7 +17,7 @@ use crate::LocalAlloc;
 pub struct Allocator {
     current: usize,
     end: usize,
-    bins: [LinkedList; 32 - 4],
+    bins: [LinkedList; 32 - 2],
 }
 
 impl Allocator {
@@ -27,13 +27,13 @@ impl Allocator {
         Allocator {
             current: start,
             end,
-            bins: [LinkedList::new(); 32 - 4],
+            bins: [LinkedList::new(); 32 - 2],
         }
     }
 }
 use core::cmp::max;
 
-// used the 64 bins of increasing 2 powers
+// used the bins of increasing 2 powers
 impl LocalAlloc for Allocator {
     /// Allocates memory. Returns a pointer meeting the size and alignment
     /// properties of `layout.size()` and `layout.align()`.
@@ -57,9 +57,13 @@ impl LocalAlloc for Allocator {
     /// or `layout` does not meet this allocator's
     /// size or alignment constraints.
     unsafe fn alloc(&mut self, layout: Layout) -> *mut u8 {
-        
-        assert!(layout.size() > 0, "Layout size must be greater than 0");
-        let idx: usize = max(0, (layout.size()-1).ilog2() as i32 - 5) as usize; // ilog2(sizeof(usize)) == 5
+        let idx = if layout.size() == 0 {
+            0
+        } else {
+            let size_minus_one = layout.size().saturating_sub(1); // Use saturating_sub to prevent underflow
+            let ilog = if size_minus_one > 0 { size_minus_one.ilog2() as i32 } else { 0 };
+            max(0, ilog - 2) as usize // Ensure the result is non-negative
+        };
         match self.bins[idx]
             .iter_mut()
             .find(|x| ((x.value() as usize) % layout.align()) == 0)
@@ -69,7 +73,7 @@ impl LocalAlloc for Allocator {
             },
             _ => {
                 let potential_addr = align_up(self.current, layout.align());
-                match potential_addr.checked_add(1 << (idx + 6)) {
+                match potential_addr.checked_add(1 << (idx + 3)) {
                     Some(new_current) if new_current <= self.end => {
                         self.current = new_current;
                         potential_addr as *mut u8
@@ -93,11 +97,19 @@ impl LocalAlloc for Allocator {
     /// Parameters not meeting these conditions may result in undefined
     /// behavior.
     unsafe fn dealloc(&mut self, ptr: *mut u8, layout: Layout) {
-        assert!(layout.size() > 0, "Layout size must be greater than 0");
-        let idx: usize = max(0, (layout.size()-1).ilog2() as i32 - 5) as usize; // ilog2(sizeof(usize)) == 5
+        let idx = if layout.size() == 0 {
+            0
+        } else {
+            let size_minus_one = layout.size().saturating_sub(1); // Use saturating_sub to prevent underflow
+            let ilog = if size_minus_one > 0 { size_minus_one.ilog2() as i32 } else { 0 };
+            max(0, ilog - 2) as usize // Ensure the result is non-negative
+        };
         //                                                                     // FML
         //                                                                     // `LinkedList` guarantees that the passed in pointer refers to valid, unique,
         //                                                                     // writeable memory at least `usize` in size.
+        //                                                                     // FMLpt
+        //                                                                     sizeof(usize) == 8
+        //                                                                     so log2(size) >=3
         self.bins[idx].push(ptr as *mut usize);
     }
 }

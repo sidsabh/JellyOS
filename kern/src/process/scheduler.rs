@@ -181,7 +181,7 @@ impl GlobalScheduler {
     pub unsafe fn initialize(&self) {
         *self.0.lock() = Some(Box::new(Scheduler::new()));
 
-        for _ in 0..NCORES*2 {
+         for _ in 0..NCORES*2 {
             use shim::path::Path;
             let p = Process::load(Path::new("/programs/fib.bin")).expect("failed to load fib proc");
             self.add(p);

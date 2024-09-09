@@ -3,7 +3,7 @@ mod syndrome;
 mod syscall;
 
 pub mod irq;
-use crate::console::kprintln;
+use crate::console::{kprint, kprintln};
 
 pub use self::frame::TrapFrame;
 
@@ -54,7 +54,7 @@ pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
             handle_syscall(num, tf);
         }
         Kind::Synchronous => {
-            // kprintln!("{:#?}, {}, {:#?}", info, esr, Syndrome::from(esr));
+            kprintln!("{:#?}, {}, {:#?}", info, esr, Syndrome::from(esr));
             // Preferred Exception Return Address for synchronous
             // is the address of instr that generated exception
             tf.pc += 4;
@@ -90,7 +90,11 @@ pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
                 panic!("interrupt not handled");
             }
         }
-        Kind::Fiq => {}
-        Kind::SError => {}
+        Kind::Fiq => {
+            kprintln!("FIQ trap");
+        }
+        Kind::SError => {
+            kprintln!("SError trap");
+        }
     }
 }

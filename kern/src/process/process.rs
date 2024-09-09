@@ -32,7 +32,7 @@ pub struct Process {
     // pub sockets: Vec<SocketHandle>,
 }
 use kernel_api::{OsResult, OsError};
-use crate::align_down;
+use heap::align_down;
 impl Process {
     /// Creates a new process with a zeroed `TrapFrame` (the default), a zeroed
     /// stack of the default size, and a state of `Ready`.
@@ -94,7 +94,7 @@ impl Process {
         use shim::io::Read;
         let mut file = FILESYSTEM.open_file(pn)?;
         let mut p = Process::new().expect("failed to create processs");
-        p.vmap.alloc(Process::get_stack_base(), PagePerm::RW);
+        p.vmap.alloc(Process::get_stack_base(), PagePerm::RWX);
         
         use alloc::vec;
         let mut data = vec![];

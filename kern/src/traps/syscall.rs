@@ -1,3 +1,4 @@
+use aarch64::current_el;
 use alloc::boxed::Box;
 use core::time::Duration;
 
@@ -269,7 +270,7 @@ pub fn sys_write_str(va: usize, len: usize, tf: &mut TrapFrame) {
         Ok(msg) => {
             kprint!("{}", msg);
 
-            tf.regs[0] = msg.len() as u64;
+            //tf.regs[0] = msg.len() as u64;
             tf.regs[7] = OsError::Ok as u64;
         }
         Err(e) => {

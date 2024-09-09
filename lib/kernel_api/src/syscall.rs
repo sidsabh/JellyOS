@@ -59,10 +59,6 @@ pub fn time() -> Duration {
             current_time = out(reg) current_time,
             frac_time = out(reg) frac_time,
             ecode = out(reg) ecode,
-            out("x0") _,   // Clobbers x0
-            out("x1") _,   // Clobbers x0
-            out("x7") _,   // Clobbers x0
-            options(nostack),
         );
     }
 
@@ -100,25 +96,30 @@ pub fn write(b: u8) {
     let _ = OsError::from(ecode);
 }
 
-pub fn write_str(msg: &str) {
+pub fn write_str(msg: &str) -> u64 {
     let mut ecode: u64;
+    let mut printed_len: u64;
 
     unsafe {
         asm!(
             "mov x0, {str_addr:x}",
             "mov x1, {str_len:x}",
             "svc {nr_write_str}",
-            "mov {ecode}, x7",
+            "mov {printed_len:x}, x0",
+            "mov {ecode:x}, x7",
             str_addr = in(reg) msg as *const str as *const usize as usize,
             str_len = in(reg) msg.len(),
             nr_write_str = const NR_WRITE_STR,
             ecode = out(reg) ecode,
+            printed_len = out(reg) printed_len,
             out("x7") _,   // Clobbers x0
             options(nostack),
         );
     }
 
     let _ = OsError::from(ecode);
+
+    printed_len
 }
 
 pub fn getpid() -> u64 {
