@@ -1,5 +1,6 @@
+use alloc::string::ToString;
 use log::{LevelFilter, Metadata, Record};
-use crate::println;
+use crate::{println, uprintln};
 
 struct UserLogger;
 static LOGGER: UserLogger = UserLogger;

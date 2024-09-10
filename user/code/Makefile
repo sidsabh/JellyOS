@@ -10,8 +10,6 @@ NM := cargo nm
 # The default target to build all binaries
 all: $(BINARIES:%=build/%)
 
-#TODO: figure out VERBOSE_BUILD
-
 # Build each binary
 build/%:
 	@echo "+ Building $@.elf"

@@ -2,7 +2,7 @@
 #![no_main]
 use user::*;
 
-use kernel_api::syscall::*;
+use kernel_api::syscall;
 
 fn fib(n: u64) -> u64 {
     match n {
@@ -11,13 +11,19 @@ fn fib(n: u64) -> u64 {
         n => fib(n - 1) + fib(n - 2),
     }
 }
+use crate::alloc::vec;
+use crate::alloc::vec::Vec;
 
 #[no_mangle]
 fn main() {
-    let pid = getpid();
-    let beg = time();
+    let pid = syscall::getpid();
+    let beg = syscall::time();
     println!("[{:02}] Started: {:?}", pid, beg);
-    let rtn = fib(40);
-    let end = time();
+    let mut v : Vec<u64> = vec!();
+    for i in 1..=40 {
+        v.push(fib(i));
+    }
+    let rtn = v.last().expect("push failed");
+    let end = syscall::time();
     println!("[{:02}] Result: {} ({:?})", pid, rtn, end - beg);
 }

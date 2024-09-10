@@ -31,6 +31,7 @@ fn panic(_info: &PanicInfo) -> ! {
     syscall::exit();
 }
 
+
 unsafe fn setup_memory() {
     // zero bss
     extern "C" {
@@ -54,9 +55,9 @@ unsafe fn setup_memory() {
 
     // initialize logger
     init_logger();
-
-    // print info
-    trace!("heap beg: {:016x}, end: {:016x}", start, end);
+    if syscall::getpid() != 0 {
+        return;
+    }
     trace!("text beg: {:016x}, end: {:016x}",
         addr_of!(__text_beg) as *const _ as u64, addr_of!(__text_end) as *const _ as u64
     );
@@ -64,6 +65,7 @@ unsafe fn setup_memory() {
         "bss  beg: {:016x}, end: {:016x}",
         addr_of!(__bss_beg) as *const _ as u64, addr_of!(__bss_end) as *const _ as u64
     );
+    trace!("heap beg: {:016x}, end: {:016x}", start, end);
 }
 
 extern "Rust" {

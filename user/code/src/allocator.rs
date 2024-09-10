@@ -43,22 +43,29 @@ impl Allocator {
 
 unsafe impl GlobalAlloc for Allocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        let aligned_layout = Layout::from_size_align(layout.size(), layout.align().max(4))
+            .expect("Invalid layout for allocation");
         let ptr = self.0
             .lock()
             .as_mut()
             .expect("allocator uninitialized")
-            .alloc(layout);
-        // uprintln!("alloc {:x}, {:#?}", ptr as u64, aligned_layout);
+            .alloc(aligned_layout);
+        //uprintln!("alloc {:x}, {:#?}", ptr as u64, layout);
         ptr
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        //uprintln!("dealloc {:x}, {:#?}", ptr as u64, layout);
+        if crate::allocator::USER_IMG_BASE > ptr as usize {
+            return; // bandaid solution for weird log dealloc
+        }
+        let aligned_layout = Layout::from_size_align(layout.size(), layout.align().max(4))
+            .expect("Invalid layout for deallocation");
         self.0
             .lock()
             .as_mut()
             .expect("allocator uninitialized")
-            .dealloc(ptr, layout);
-        //uprintln!("dealloc {:x}, {:#?}", ptr as u64, aligned_layout);
+            .dealloc(ptr, aligned_layout);
     }
 }
 
