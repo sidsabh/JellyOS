@@ -12,6 +12,7 @@ pub extern crate alloc;
 
 use allocator::{ALLOCATOR, memory_map};
 use kernel_api::syscall;
+use log::log;
 use logger::init_logger;
 
 pub use log::{info, warn, trace, debug, error};
@@ -58,6 +59,7 @@ unsafe fn setup_memory() {
     if syscall::getpid() != 0 {
         return;
     }
+    
     trace!("text beg: {:016x}, end: {:016x}",
         addr_of!(__text_beg) as *const _ as u64, addr_of!(__text_end) as *const _ as u64
     );

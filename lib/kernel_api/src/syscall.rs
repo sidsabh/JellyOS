@@ -96,7 +96,7 @@ pub fn write(b: u8) {
     let _ = OsError::from(ecode);
 }
 
-pub fn write_str(msg: &str) -> u64 {
+pub fn write_str(msg: &str) {
     let mut ecode: u64;
     let mut printed_len: u64;
 
@@ -112,14 +112,15 @@ pub fn write_str(msg: &str) -> u64 {
             nr_write_str = const NR_WRITE_STR,
             ecode = out(reg) ecode,
             printed_len = out(reg) printed_len,
+            out("x0") _,   // Clobbers x0
             out("x7") _,   // Clobbers x0
             options(nostack),
         );
     }
+    assert!(msg.len() == printed_len as usize); // why does this fail if i don't include??
 
     let _ = OsError::from(ecode);
 
-    printed_len
 }
 
 pub fn getpid() -> u64 {

@@ -4,13 +4,10 @@ use heap::align_up;
 use alloc::alloc::Layout;
 use alloc::alloc::GlobalAlloc;
 use heap::{AllocatorImpl, LocalAlloc};
-use log::info;
-use log::trace;
 use core::fmt;
 use spin::Mutex;
 
 use crate::uprintln;
-
 /// Thread-safe (locking) wrapper around a particular memory allocator.
 pub struct Allocator(Mutex<Option<AllocatorImpl>>);
 
@@ -56,9 +53,6 @@ unsafe impl GlobalAlloc for Allocator {
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         //uprintln!("dealloc {:x}, {:#?}", ptr as u64, layout);
-        if crate::allocator::USER_IMG_BASE > ptr as usize {
-            return; // bandaid solution for weird log dealloc
-        }
         let aligned_layout = Layout::from_size_align(layout.size(), layout.align().max(4))
             .expect("Invalid layout for deallocation");
         self.0

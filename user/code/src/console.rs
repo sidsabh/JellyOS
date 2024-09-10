@@ -29,7 +29,7 @@ macro_rules! print {
 macro_rules! println {
     () => (print!("\n"));
     ($($arg:tt)*) => ({
-        crate::console::vprint(&crate::alloc::format!("{}\n", format_args!($($arg)*)));
+        crate::console::vprint(&crate::alloc::format!("{}\n", &crate::alloc::format!($($arg)*)));
     });
 }
 

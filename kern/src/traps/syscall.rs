@@ -83,33 +83,103 @@ pub fn sys_getpid(tf: &mut TrapFrame) {
     tf.regs[7] = 1;
 }
 
-pub fn handle_syscall(num: u16, tf: &mut TrapFrame) {
-    match num as usize {
-        NR_SLEEP => {
-            sys_sleep(tf.regs[0] as u32, tf);
-        },
-        NR_TIME => {
-            sys_time(tf);
-        },
-        NR_EXIT => {
-            sys_exit(tf);
-        },
-        NR_WRITE => {
-            sys_write(tf.regs[0] as u8, tf);
-        },
-        NR_GETPID => {
-            sys_getpid(tf);
-        },
-        NR_WRITE_STR => {
-            sys_write_str(tf.regs[0] as usize, tf.regs[1] as usize, tf)
+/// Returns a slice from a virtual address and a legnth.
+///
+/// # Errors
+/// This functions returns `Err(OsError::BadAddress)` if the slice is not entirely
+/// in userspace.
+unsafe fn to_user_slice<'a>(va: usize, len: usize) -> OsResult<&'a [u8]> {
+    let overflow = va.checked_add(len).is_none();
+    if va >= USER_IMG_BASE && !overflow {
+        Ok(core::slice::from_raw_parts(va as *const u8, len))
+    } else {
+        Err(OsError::BadAddress)
+    }
+}
+/// Returns a mutable slice from a virtual address and a legnth.
+///
+/// # Errors
+/// This functions returns `Err(OsError::BadAddress)` if the slice is not entirely
+/// in userspace.
+unsafe fn to_user_slice_mut<'a>(va: usize, len: usize) -> OsResult<&'a mut [u8]> {
+    let overflow = va.checked_add(len).is_none();
+    if va >= USER_IMG_BASE && !overflow {
+        Ok(core::slice::from_raw_parts_mut(va as *mut u8, len))
+    } else {
+        Err(OsError::BadAddress)
+    }
+}
+/// Writes a UTF-8 string to the console.
+///
+/// This system call takes the address of the buffer as the first parameter and
+/// the length of the buffer as the second parameter.
+///
+/// In addition to the usual status value, this system call returns the length
+/// of the UTF-8 message.
+///
+/// # Errors
+/// This function can return following errors:
+///
+/// - `OsError::BadAddress`: The address and the length pair does not form a valid userspace slice.
+/// - `OsError::InvalidArgument`: The provided buffer is not UTF-8 encoded.
+pub fn sys_write_str(va: usize, len: usize, tf: &mut TrapFrame) {
+    let result = unsafe { to_user_slice(va, len) }
+        .and_then(|slice| core::str::from_utf8(slice).map_err(|_| OsError::InvalidArgument));
+
+    match result {
+        Ok(msg) => {
+            kprint!("{}", msg);
+
+            tf.regs[0] = msg.len() as u64; // sorry for commenting you sir
+            tf.regs[7] = OsError::Ok as u64;
         }
-        _ => {
-            panic!("unimplemented syscall");
+        Err(e) => {
+            tf.regs[7] = e as u64;
         }
     }
 }
+/// Sends data with a connected socket.
+///
+/// This system call takes a socket descriptor as the first parameter, the
+/// address of the buffer as the second parameter, and the length of the buffer
+/// as the third parameter.
+///
+/// In addition to the usual status value, this system call returns one
+/// parameter: the number of bytes sent.
+///
+/// # Errors
+/// This function can return following errors:
+///
+/// - `OsError::InvalidSocket`: Cannot find a socket that corresponds to the provided descriptor.
+/// - `OsError::BadAddress`: The address and the length pair does not form a valid userspace slice.
+/// - `OsError::IllegalSocketOperation`: `send_slice()` returned `smoltcp::Error::Illegal`.
+/// - `OsError::Unknown`: All the other errors from smoltcp.
+pub fn sys_sock_send(sock_idx: usize, va: usize, len: usize, tf: &mut TrapFrame) {
+    // Lab 5 2.D
+    unimplemented!("sys_sock_send")
+}
 
-/// Creates a socket and saves the socket handle in the current process's
+/// Receives data from a connected socket.
+///
+/// This system call takes a socket descriptor as the first parameter, the
+/// address of the buffer as the second parameter, and the length of the buffer
+/// as the third parameter.
+///
+/// In addition to the usual status value, this system call returns one
+/// parameter: the number of bytes read.
+///
+/// # Errors
+/// This function can return following errors:
+///
+/// - `OsError::InvalidSocket`: Cannot find a socket that corresponds to the provided descriptor.
+/// - `OsError::BadAddress`: The address and the length pair does not form a valid userspace slice.
+/// - `OsError::IllegalSocketOperation`: `recv_slice()` returned `smoltcp::Error::Illegal`.
+/// - `OsError::Unknown`: All the other errors from smoltcp.
+pub fn sys_sock_recv(sock_idx: usize, va: usize, len: usize, tf: &mut TrapFrame) {
+    // Lab 5 2.D
+    unimplemented!("sys_sock_recv")
+}
+
 /// socket list.
 ///
 /// This function does neither take any parameter nor return anything,
@@ -186,101 +256,29 @@ pub fn sys_sock_listen(sock_idx: usize, local_port: u16, tf: &mut TrapFrame) {
     unimplemented!("sys_sock_listen")
 }
 
-/// Returns a slice from a virtual address and a legnth.
-///
-/// # Errors
-/// This functions returns `Err(OsError::BadAddress)` if the slice is not entirely
-/// in userspace.
-unsafe fn to_user_slice<'a>(va: usize, len: usize) -> OsResult<&'a [u8]> {
-    let overflow = va.checked_add(len).is_none();
-    if va >= USER_IMG_BASE && !overflow {
-        Ok(core::slice::from_raw_parts(va as *const u8, len))
-    } else {
-        Err(OsError::BadAddress)
-    }
-}
-/// Returns a mutable slice from a virtual address and a legnth.
-///
-/// # Errors
-/// This functions returns `Err(OsError::BadAddress)` if the slice is not entirely
-/// in userspace.
-unsafe fn to_user_slice_mut<'a>(va: usize, len: usize) -> OsResult<&'a mut [u8]> {
-    let overflow = va.checked_add(len).is_none();
-    if va >= USER_IMG_BASE && !overflow {
-        Ok(core::slice::from_raw_parts_mut(va as *mut u8, len))
-    } else {
-        Err(OsError::BadAddress)
-    }
-}
-
-/// Sends data with a connected socket.
-///
-/// This system call takes a socket descriptor as the first parameter, the
-/// address of the buffer as the second parameter, and the length of the buffer
-/// as the third parameter.
-///
-/// In addition to the usual status value, this system call returns one
-/// parameter: the number of bytes sent.
-///
-/// # Errors
-/// This function can return following errors:
-///
-/// - `OsError::InvalidSocket`: Cannot find a socket that corresponds to the provided descriptor.
-/// - `OsError::BadAddress`: The address and the length pair does not form a valid userspace slice.
-/// - `OsError::IllegalSocketOperation`: `send_slice()` returned `smoltcp::Error::Illegal`.
-/// - `OsError::Unknown`: All the other errors from smoltcp.
-pub fn sys_sock_send(sock_idx: usize, va: usize, len: usize, tf: &mut TrapFrame) {
-    // Lab 5 2.D
-    unimplemented!("sys_sock_send")
-}
-
-/// Receives data from a connected socket.
-///
-/// This system call takes a socket descriptor as the first parameter, the
-/// address of the buffer as the second parameter, and the length of the buffer
-/// as the third parameter.
-///
-/// In addition to the usual status value, this system call returns one
-/// parameter: the number of bytes read.
-///
-/// # Errors
-/// This function can return following errors:
-///
-/// - `OsError::InvalidSocket`: Cannot find a socket that corresponds to the provided descriptor.
-/// - `OsError::BadAddress`: The address and the length pair does not form a valid userspace slice.
-/// - `OsError::IllegalSocketOperation`: `recv_slice()` returned `smoltcp::Error::Illegal`.
-/// - `OsError::Unknown`: All the other errors from smoltcp.
-pub fn sys_sock_recv(sock_idx: usize, va: usize, len: usize, tf: &mut TrapFrame) {
-    // Lab 5 2.D
-    unimplemented!("sys_sock_recv")
-}
-
-/// Writes a UTF-8 string to the console.
-///
-/// This system call takes the address of the buffer as the first parameter and
-/// the length of the buffer as the second parameter.
-///
-/// In addition to the usual status value, this system call returns the length
-/// of the UTF-8 message.
-///
-/// # Errors
-/// This function can return following errors:
-///
-/// - `OsError::BadAddress`: The address and the length pair does not form a valid userspace slice.
-/// - `OsError::InvalidArgument`: The provided buffer is not UTF-8 encoded.
-pub fn sys_write_str(va: usize, len: usize, tf: &mut TrapFrame) {
-    let result = unsafe { to_user_slice(va, len) }
-        .and_then(|slice| core::str::from_utf8(slice).map_err(|_| OsError::InvalidArgument));
-
-    match result {
-        Ok(msg) => {
-            kprint!("{}", msg);
-
-            //tf.regs[0] = msg.len() as u64;
-            tf.regs[7] = OsError::Ok as u64;
+pub fn handle_syscall(num: u16, tf: &mut TrapFrame) {
+    match num as usize {
+        NR_SLEEP => {
+            sys_sleep(tf.regs[0] as u32, tf);
+        },
+        NR_TIME => {
+            sys_time(tf);
+        },
+        NR_EXIT => {
+            sys_exit(tf);
+        },
+        NR_WRITE => {
+            sys_write(tf.regs[0] as u8, tf);
+        },
+        NR_GETPID => {
+            sys_getpid(tf);
+        },
+        NR_WRITE_STR => {
+            sys_write_str(tf.regs[0] as usize, tf.regs[1] as usize, tf)
         }
-        Err(e) => {
-            tf.regs[7] = e as u64;
+        _ => {
+            panic!("unimplemented syscall");
         }
     }
 }
+
