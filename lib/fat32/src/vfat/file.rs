@@ -16,6 +16,19 @@ pub struct File<HANDLE: VFatHandle> {
     pub offset : usize,
 }
 
+impl<HANDLE: VFatHandle> Clone for File<HANDLE> {
+    fn clone(&self) -> Self {
+        File {
+            vfat: self.vfat.clone(),
+            first_cluster: self.first_cluster,
+            metadata: self.metadata.clone(),
+            name: self.name.clone(),
+            data: self.data.clone(),
+            offset: self.offset,
+        }
+    }
+}
+
 impl<HANDLE: VFatHandle> io::Read for File<HANDLE> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let bytes_to_read = (self.data[self.offset..].len() as usize).min(buf.len());

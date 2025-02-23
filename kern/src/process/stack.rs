@@ -74,8 +74,8 @@ impl Clone for Stack {
         let new_stack = Stack::new().expect("Failed to clone stack");
         unsafe {
             core::ptr::copy_nonoverlapping(
-                self.ptr.as_ptr(),
-                new_stack.ptr.as_ptr(),
+                self.as_mut_ptr(),
+                new_stack.as_mut_ptr(),
                 Stack::SIZE,
             );
         }

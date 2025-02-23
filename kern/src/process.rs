@@ -64,6 +64,8 @@ impl<T: VFatHandle> ProcessFileT for fat32::vfat::File<T> {
     }
 }
 
+
+
 use fat32::traits::Dir;
 use alloc::string::String;
 use fat32::traits::Entry;
@@ -103,7 +105,7 @@ impl<T: VFatHandle> ProcessFileT for fat32::vfat::Dir<T> {
     }
 }
 
-pub trait ProcessFileT: Send + core::fmt::Debug {
+pub trait ProcessFileT: Send + Sync + core::fmt::Debug {
     fn is_dir(&self) -> bool { false }
     fn is_readable(&self) -> bool;
     fn is_writable(&self) -> bool;
@@ -114,12 +116,23 @@ pub trait ProcessFileT: Send + core::fmt::Debug {
     fn readdir(&mut self, _buf: &mut [u8]) -> io::Result<usize> {
         Err(io::Error::new(io::ErrorKind::InvalidInput, "Not a directory"))
     }
+
 }
 
+
+
+use alloc::sync::Arc;
+use crate::mutex::Mutex;
 use alloc::boxed::Box;
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ProcessFile {
-    pub handle: Box<dyn ProcessFileT>, // Handle to a file (NodeFile or DeviceFile)
-    pub offset: usize, // Potentially useful offset
+    pub handle: Arc<Mutex<Box<dyn ProcessFileT>>>, // Shared, mutable file descriptor
+    pub offset: usize,
 }
 
+
+impl Clone for ConsoleFile {
+    fn clone(&self) -> Self {
+        ConsoleFile
+    }
+}

@@ -20,7 +20,7 @@ fn main() {
     let beg = syscall::time();
     println!("[{:02}] Started: {:?}", pid, beg);
     let mut v : Vec<u64> = vec!();
-    for i in 1..=40 {
+    for i in pid..=35+pid {
         v.push(fib(i));
     }
     let rtn = v.last().expect("push failed");

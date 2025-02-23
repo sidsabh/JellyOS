@@ -71,6 +71,8 @@ vec_context_restore:
     msr ELR_EL1, x0
     msr SPSR_EL1, x1
 
+    isb
+
     ldp x0, x1, [SP], #16
     msr SP_EL0, x0
     msr TPIDR_EL0, x1

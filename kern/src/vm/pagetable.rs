@@ -131,6 +131,18 @@ impl PageTable {
         pt
     }
 
+
+    pub fn get_page(&self, va: VirtualAddr) -> Option<&mut [u8]> {
+        let (l2_idx, l3_idx) = PageTable::locate(va);
+        let entry = &self.l3[l2_idx].entries[l3_idx];
+        if entry.is_valid() {
+            let addr = entry.0.get_masked(RawL3Entry::ADDR) as *mut u8;
+            Some(unsafe { core::slice::from_raw_parts_mut(addr, Page::SIZE) })
+        } else {
+            None
+        }
+    }
+
     /// Returns the (L2index, L3index) extracted from the given virtual address.
     /// L2index should be smaller than the number of L3PageTable.
     ///
@@ -291,7 +303,8 @@ impl UserPageTable {
         let adj_va = va.sub(VirtualAddr::from(USER_IMG_BASE)); // normalize
 
         if self.is_valid(adj_va) {
-            panic!("virtual address has already been allocated");
+            return self.get_page(va).unwrap();
+            // panic!("virtual address has already been allocated");
         }
 
         use core::slice;
@@ -411,6 +424,8 @@ impl Clone for UserPageTable {
                 if entry.is_valid() {
                     let old_phys_addr = entry.0.get_masked(RawL3Entry::ADDR);
                     let virt_addr = VirtualAddr::from(USER_IMG_BASE+ (l2_idx << 29) | (l3_idx << 16));
+
+                    // kprintln!("Cloning page at {:x} to {:x}", old_phys_addr, virt_addr.as_usize());
 
                     // Allocate a new page
                     let new_page_slice = new_page_table.alloc(virt_addr, PagePerm::RWX);

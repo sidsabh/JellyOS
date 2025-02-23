@@ -54,15 +54,15 @@ impl Process {
 
         // Open file descriptors 0, 1, 2 (stdin, stdout, stderr)
         files.push(Some(ProcessFile {
-            handle: Box::new(ConsoleFile),
+            handle: Arc::new(Mutex::new(Box::new(ConsoleFile))),
             offset: 0
         }));
         files.push(Some(ProcessFile {
-            handle: Box::new(ConsoleFile),
+            handle: Arc::new(Mutex::new(Box::new(ConsoleFile))),
             offset: 0
         }));
         files.push(Some(ProcessFile {
-            handle: Box::new(ConsoleFile),
+            handle: Arc::new(Mutex::new(Box::new(ConsoleFile))),
             offset: 0
         }));
 
@@ -76,6 +76,91 @@ impl Process {
 
         Ok(p)
     }
+
+
+    pub fn execve<P: AsRef<Path>>(process: &mut Process, pn: P, args: Vec<&str>) -> Result<(), OsError> {
+        use fat32::traits::FileSystem;
+        use shim::io::Read;
+    
+        kprintln!("[execve] Loading program '{}'", pn.as_ref().to_str().unwrap());
+    
+        // Load the program file
+        let mut file = FILESYSTEM.open_file(pn).map_err(|_| {
+            kprintln!("[execve] Error: Could not open file");
+            OsError::InvalidFile
+        })?;
+    
+        let mut data = Vec::new();
+        file.read_to_end(&mut data).map_err(|_| {
+            kprintln!("[execve] Error: Failed to read file");
+            OsError::InvalidFile
+        })?;
+    
+        // Allocate pages for the process image
+        let data_pages = data.chunks(PAGE_SIZE);
+        let page_nums = data_pages.len();
+    
+        for (idx, data_page) in data_pages.enumerate() {
+            let va = VirtualAddr::from(Process::get_image_base().as_usize() + PAGE_SIZE * idx);
+            let page = process.vmap.alloc(va, PagePerm::RWX);
+            page[..data_page.len()].copy_from_slice(data_page);
+        }
+    
+        // Allocate user heap pages
+        let user_heap_pages = 16; // 1MB user heap
+        for idx in page_nums..(page_nums + user_heap_pages) {
+            let va = VirtualAddr::from(Process::get_image_base().as_usize() + PAGE_SIZE * idx);
+            let page = process.vmap.alloc(va, PagePerm::RWX);
+            page.iter_mut().for_each(|x| *x = 0);
+        }
+    
+        // Reset process trap frame
+        process.context = Box::new(TrapFrame::default());
+    
+        // Set stack pointer
+        process.context.sp = Process::get_stack_top().as_u64();
+    
+        // Zero out stack
+        let page = process.vmap.get_page(Process::get_stack_base()).unwrap();
+        page.fill(0);
+    
+        // Set process entry point
+        process.context.pc = Process::get_image_base().as_u64();
+    
+        // Copy arguments to stack
+        let mut sp = process.context.sp as *mut u64;
+        let mut argv_pointers = Vec::new();
+    
+        for arg in args.iter().rev() {
+            let len = arg.len() + 1; // Include null terminator
+            let arg_ptr = sp.wrapping_offset(-(len as isize) as isize);
+            unsafe {
+                core::ptr::copy(arg.as_ptr(), arg_ptr as *mut u8, len - 1);
+                core::ptr::write(arg_ptr.add(len - 1) as *mut u64, 0u64); // Null-terminate
+            }
+            argv_pointers.push(arg_ptr as u64);
+            sp = arg_ptr as *mut u64;
+        }
+    
+        // Push argv array
+        argv_pointers.push(0); // Null terminate argv array
+        let argv_base = sp.wrapping_offset(-(argv_pointers.len() as isize));
+        unsafe {
+            core::ptr::copy(argv_pointers.as_ptr(), argv_base as *mut u64, argv_pointers.len());
+        }
+    
+        // Align stack
+        let aligned_sp = (argv_base as usize & !0xF) as *mut u64;
+        process.context.sp = aligned_sp as u64;
+    
+        // Set registers for argc, argv
+        process.context.regs[0] = args.len() as u64;  // argc
+        process.context.regs[1] = aligned_sp as u64; // argv
+    
+        // kprintln!("[execve] Switching to user mode at {:#x}", process.context.pc);
+        return Ok(());
+    }
+    
 
     /// Loads a program stored in the given path by calling `do_load()` method.
     /// Sets trapframe `context` corresponding to its page table.
@@ -201,21 +286,12 @@ impl Process {
 
 impl Clone for Process {
     fn clone(&self) -> Self {
-        // TODO: fix files
-        // let mut files = Vec::new();
-        // for file in self.files.iter() {
-        //     if let Some(f) = file {
-        //         files.push(Some(f.clone()));
-        //     } else {
-        //         files.push(None);
-        //     }
-        // }
         Process {
             context: self.context.clone(),
             stack: self.stack.clone(),
             vmap: self.vmap.clone(),
             state: self.state.clone(),
-            files : alloc::vec![],
+            files : self.files.clone(),
         }
     }
 }

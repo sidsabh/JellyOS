@@ -20,7 +20,6 @@ pub fn sleep(span: Duration) -> OsResult<Duration> {
     if span.as_millis() > core::u64::MAX as u128 {
         panic!("too big!");
     }
-
     let ms = span.as_millis() as u64;
     let mut ecode: u64;
     let mut elapsed_ms: u64;
@@ -371,18 +370,25 @@ pub fn fork() -> OsResult<usize> {
         );
     }
 
-    err_or!(ecode, pid as usize)
+    Ok(pid as usize) // TODO: not good error code
 }
 
 pub fn exec(path: &str) -> OsResult<()> {
     let mut ecode: u64;
+    let mut buf = [0u8; 256]; // Ensure buffer size is large enough
+
+    // Copy and null-terminate the string
+    let len = path.len().min(255);  // Prevent buffer overflow
+    buf[..len].copy_from_slice(&path.as_bytes()[..len]);
+    buf[len] = 0;  // Null-terminate the string
+
 
     unsafe {
         asm!(
             "mov x0, {path_addr}",
             "svc {nr_exec}",
             "mov {ecode}, x7",
-            path_addr = in(reg) path.as_ptr(),
+            path_addr = in(reg) buf.as_ptr(),
             nr_exec = const NR_EXEC,
             ecode = out(reg) ecode,
             out("x7") _,   // Clobbers x7

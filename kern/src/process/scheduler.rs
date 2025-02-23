@@ -189,6 +189,19 @@ impl GlobalScheduler {
         self.critical(|scheduler| scheduler.kill(tf))
     }
 
+    pub fn switch_to_user(tf: &TrapFrame) -> ! {
+        let frame_addr = tf as *const TrapFrame as *const u64 as u64;
+        unsafe {
+            asm!(
+                "mov x0, {context:x}",
+                "bl idle_context_restore",
+                "eret",
+                context = in(reg) frame_addr,
+            );
+        }
+        loop {}
+    }
+
     /// Starts executing processes in user space using timer interrupt based
     /// preemptive scheduling. This method should not return under normal conditions.
     pub fn start(&'static self) -> ! {
@@ -213,18 +226,8 @@ impl GlobalScheduler {
         let mut vmap = Box::new(upt);
         tf.ttbr1_el1 = vmap.get_baddr().as_u64();
         GlobalScheduler::load_code(&mut vmap, idle_proc_code as *const u8);
-        let frame_addr = tf.as_ref() as *const TrapFrame as *const u64 as u64;
-
-        unsafe {
-            asm!(
-                "mov x0, {context:x}",
-                "bl idle_context_restore",
-                "eret",
-                context = in(reg) frame_addr,
-            );
-        }
-        Self::switch_to_idle();
-        loop {}
+        GlobalScheduler::switch_to_user(&tf)
+        
     }
 
     /// # Lab 4

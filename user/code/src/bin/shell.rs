@@ -200,22 +200,25 @@ fn main() {
                     }
                 }
             }
-            _ if args[0].starts_with("./") => {
-                let path = args[0].to_string();
+            _ if args[0].starts_with("./") || args[0].starts_with("/") => {
+                let mut path = args[0].to_string();
+                if !path.starts_with("/") {
+                    let cleaned_path = path.trim_start_matches("./");
+                    path = format!("{}/{}", pwd.trim_end_matches('/'), cleaned_path);
+                }
+
                 let pid = syscall::fork();
-                
+                println!("forked with pid: {:?}", pid);
                 match pid {
                     Ok(0) => {
                         // Child process: Execute the new program
-                        // drop first character of path
-                        let path = &path[1..];
                         if syscall::exec(&path).is_err() {
                             println!("error: failed to execute {}", path);
                             syscall::exit();
                         }
                     }
-                    Ok(_) => {
-                        info!("created child process with PID {}", pid.unwrap());
+                    Ok(pid) => {
+                        info!("created child process with PID {}", pid);
                         // TODO: add child descriptors, wait, etc.
                         // syscall::wait();
                     }

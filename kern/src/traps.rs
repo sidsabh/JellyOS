@@ -48,7 +48,7 @@ use crate::{shell, IRQ};
 /// the trap frame for the exception.
 #[no_mangle]
 pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
-    //kprintln!("info: {:#?}", info);
+    // kprintln!("info: {:#?}", info);
     match info.kind {
         Kind::Synchronous if let Syndrome::Svc(num) = Syndrome::from(esr) => {
             // kprintln!("tf: {:#?}", tf);
