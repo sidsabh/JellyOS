@@ -29,6 +29,9 @@ pub enum OsError {
     IoErrorInvalidInput = 104,
     IoErrorTimedOut = 105,
 
+    InvalidFile = 110,
+    InvalidDirectory = 111,
+
     InvalidSocket = 200,
     IllegalSocketOperation = 201,
 }
@@ -78,6 +81,27 @@ pub const NR_EXIT: usize = 3;
 pub const NR_WRITE: usize = 4;
 pub const NR_GETPID: usize = 5;
 pub const NR_WRITE_STR: usize = 6;
+pub const NR_OPEN: usize = 7;
+pub const NR_CLOSE: usize = 8;
+pub const NR_READ: usize = 9;
+pub const NR_SEEK: usize = 10;
+pub const NR_LEN: usize = 11;
+pub const NR_READDIR: usize = 12;
+pub const NR_EXEC: usize = 13;
+pub const NR_FORK: usize = 14;
+
+
+
+#[derive(Clone, Copy, Debug)]
+pub struct FileDescriptor(u64);
+
+impl FileDescriptor {
+    pub fn raw(&self) -> u64 {
+        self.0
+    }
+}
+
+
 
 #[derive(Clone, Copy, Debug)]
 pub struct SocketDescriptor(u64);

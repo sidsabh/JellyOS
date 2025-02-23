@@ -38,7 +38,7 @@ impl Allocator {
 
 unsafe impl GlobalAlloc for Allocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        // kprintln!("allocing: {}  bytes", layout.size());
+        // crate::console::kprintln!("allocating: {}  bytes", layout.size());
         let aligned_layout = Layout::from_size_align(layout.size(), layout.align().max(4))
             .expect("Invalid layout for allocation");
         self.0
@@ -49,7 +49,7 @@ unsafe impl GlobalAlloc for Allocator {
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        // kprintln!("deallocing: {}  bytes", layout.size());
+        // crate::console::kprintln!("deallocating: {}  bytes", layout.size());
         let aligned_layout = Layout::from_size_align(layout.size(), layout.align().max(4))
             .expect("Invalid layout for deallocation");
         self.0
@@ -86,8 +86,8 @@ pub fn memory_map() -> Option<(usize, usize)> {
         Some(atag) => {
             let mem = atag.mem().unwrap();
             Some((binary_end, (mem.size as usize) - binary_end))
-        }
-        None => Some((1000000, 1006022656)) // atags not appearing for ELF kernel QEMU fix,
+        },
+        None => Some((1000000, 994050048)) // atags not appearing for QEMU fix
         // None => None // correct code
     }
 

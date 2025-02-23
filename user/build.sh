@@ -39,5 +39,9 @@ make -C code
 for prog in "${PROGS[@]}"; do
     echo "Copying $prog.bin to $MNT/programs/"
     sudo cp code/build/$prog.bin $CACHE/$prog.bin
+    sudo cp code/src/bin/$prog.rs $CACHE/$prog.rs
+
     sudo cp $CACHE/$prog.bin $MNT/programs/$prog.bin
+    sudo cp $CACHE/$prog.rs $MNT/programs/$prog.rs
+    
 done

@@ -1,5 +1,6 @@
 use aarch64::{affinity, current_el};
 use alloc::boxed::Box;
+use fat32::traits::FileSystem;
 use core::time::Duration;
 
 use smoltcp::wire::{IpAddress, IpEndpoint};
@@ -23,10 +24,11 @@ use pi::timer;
 pub fn sys_sleep(ms: u32, tf: &mut TrapFrame) {
     let start = timer::current_time();
     let desired_time = timer::current_time()+Duration::from_millis(ms as u64);
+    kprint!("Sleeping for {} ms, start: {:?}, desired: {:?}\n", ms, start, desired_time);
     let boxed_fnmut = Box::new(move |_: &mut crate::process::Process| {
         timer::current_time() >= desired_time
     });
-    SCHEDULER.switch(State::Waiting(boxed_fnmut), tf);
+    SCHEDULER.block(State::Waiting(Some(boxed_fnmut)), tf);
 
     tf.regs[0] = (timer::current_time() - start).as_millis() as u64;
     tf.regs[7] = 1;
@@ -65,12 +67,12 @@ pub fn sys_exit(tf: &mut TrapFrame) {
 /// This system call takes one parameter: a u8 character to print.
 ///
 /// It only returns the usual status value.
-pub fn sys_write(b: u8, tf: &mut TrapFrame) {
-    let mut console = CONSOLE.lock();
-    use shim::io::Write;
-    console.write(&mut[b]).expect("write failed");
-    tf.regs[7] = 1;
-}
+// pub fn sys_write(b: u8, tf: &mut TrapFrame) {
+//     let mut console = CONSOLE.lock();
+//     use shim::io::Write;
+//     console.write(&mut[b]).expect("write failed");
+//     tf.regs[7] = 1;
+// }
 
 /// Returns the current process's ID.
 ///
@@ -256,29 +258,261 @@ pub fn sys_sock_listen(sock_idx: usize, local_port: u16, tf: &mut TrapFrame) {
     unimplemented!("sys_sock_listen")
 }
 
+
 pub fn handle_syscall(num: u16, tf: &mut TrapFrame) {
     match num as usize {
-        NR_SLEEP => {
-            sys_sleep(tf.regs[0] as u32, tf);
-        },
-        NR_TIME => {
-            sys_time(tf);
-        },
-        NR_EXIT => {
-            sys_exit(tf);
-        },
-        NR_WRITE => {
-            sys_write(tf.regs[0] as u8, tf);
-        },
-        NR_GETPID => {
-            sys_getpid(tf);
-        },
-        NR_WRITE_STR => {
-            sys_write_str(tf.regs[0] as usize, tf.regs[1] as usize, tf)
+        NR_SLEEP => sys_sleep(tf.regs[0] as u32, tf),
+        NR_TIME => sys_time(tf),
+        NR_EXIT => sys_exit(tf),
+        NR_GETPID => sys_getpid(tf),
+        NR_WRITE_STR => sys_write_str(tf.regs[0] as usize, tf.regs[1] as usize, tf),
+        NR_OPEN => sys_open(tf.regs[0] as usize, tf),
+        NR_CLOSE => sys_close(tf.regs[0] as usize, tf),
+        NR_READ => sys_read(tf.regs[0] as usize, tf.regs[1] as usize, tf.regs[2] as usize, tf),
+        NR_WRITE => sys_write(tf.regs[0] as usize, tf.regs[1] as usize, tf.regs[2] as usize, tf),
+        NR_SEEK => sys_seek(tf.regs[0] as usize, tf.regs[1] as usize, tf),
+        NR_LEN => sys_len(tf.regs[0] as usize, tf),
+        NR_READDIR => sys_readdir(tf.regs[0] as usize, tf.regs[1] as usize, tf.regs[2] as usize, tf),
+        NR_EXEC => sys_exec(tf.regs[0] as usize, tf),
+        NR_FORK => sys_fork(tf),
+        _ => panic!("unimplemented syscall: {}", num),
+    }
+}
+
+pub fn sys_open(va: usize, tf: &mut TrapFrame) {
+
+    let path = match unsafe { to_user_slice(va, 256) } {
+        Ok(slice) => {
+            let s = core::str::from_utf8(slice.split(|&c| c == 0).next().unwrap_or(&[]))
+                .unwrap_or("[invalid utf8]");
+            s
         }
-        _ => {
-            panic!("unimplemented syscall");
+        Err(_) => {
+            tf.regs[7] = OsError::BadAddress as u64;
+            return;
+        }
+    };
+
+    if path.is_empty() {
+        tf.regs[7] = OsError::NoEntry as u64;
+        return;
+    }
+
+    match crate::FILESYSTEM.open(path) {
+        Ok(entry) => {
+            let fd = SCHEDULER.with_current_process_mut(tf, |process| {
+                let fd = process.files.len();
+                match entry {
+                    fat32::vfat::Entry::FileEntry(file) => {
+                        process.files.push(Some(crate::process::ProcessFile {
+                            handle: Box::new(file),
+                            offset: 0,
+                        }));
+                    }
+                    fat32::vfat::Entry::DirEntry(dir) => {
+                        process.files.push(Some(crate::process::ProcessFile {
+                            handle: Box::new(dir),
+                            offset: 0,
+                        }));
+                    }
+                }
+                fd
+            });
+
+            tf.regs[0] = fd as u64;
+            tf.regs[7] = OsError::Ok as u64;
+        }
+        Err(_) => {
+            tf.regs[7] = OsError::NoEntry as u64;
         }
     }
 }
 
+
+
+
+pub fn sys_close(fd: usize, tf: &mut TrapFrame) {
+    let result = SCHEDULER.with_current_process_mut(tf, |process| {
+        if fd >= process.files.len() || process.files[fd].is_none() {
+            return OsError::InvalidFile as u64;
+        }
+        process.files[fd] = None; // Remove file handle
+        OsError::Ok as u64
+    });
+
+    tf.regs[7] = result;
+}
+
+
+pub fn sys_read(fd: usize, va: usize, len: usize, tf: &mut TrapFrame) {
+    let (result, bytes_read) = SCHEDULER.with_current_process_mut(tf, |process| {
+        if fd >= process.files.len() || process.files[fd].is_none() {
+            return (OsError::InvalidFile as u64, 0);
+        }
+
+        let buf = match unsafe { to_user_slice_mut(va, len) } {
+            Ok(slice) => slice,
+            Err(_) => return (OsError::BadAddress as u64, 0),
+        };
+
+        match process.files[fd].as_mut().unwrap().handle.read(buf) {
+            Ok(bytes) => (OsError::Ok as u64, bytes),
+            Err(_) => (OsError::IoError as u64, 0),
+        }
+    });
+
+    tf.regs[0] = bytes_read as u64;  // Set the return value **after** the closure
+    tf.regs[7] = result;
+}
+
+pub fn sys_write(fd: usize, va: usize, len: usize, tf: &mut TrapFrame) {
+    let (result, bytes_written) = SCHEDULER.with_current_process_mut(tf, |process| {
+        if fd >= process.files.len() || process.files[fd].is_none() {
+            return (OsError::InvalidFile as u64, 0);
+        }
+
+        let buf = match unsafe { to_user_slice(va, len) } {
+            Ok(slice) => slice,
+            Err(_) => return (OsError::BadAddress as u64, 0),
+        };
+
+        match process.files[fd].as_mut().unwrap().handle.write(buf) {
+            Ok(bytes) => (OsError::Ok as u64, bytes),
+            Err(_) => (OsError::IoError as u64, 0),
+        }
+    });
+
+    tf.regs[0] = bytes_written as u64;
+    tf.regs[7] = result;
+}
+
+
+pub fn sys_seek(fd: usize, offset: usize, tf: &mut TrapFrame) {
+    let result = SCHEDULER.with_current_process_mut(tf, |process| {
+        if fd >= process.files.len() || process.files[fd].is_none() {
+            return OsError::InvalidFile as u64;
+        }
+
+        match process.files[fd].as_mut().unwrap().handle.seek(offset) {
+            Ok(_) => OsError::Ok as u64,
+            Err(_) => OsError::IoError as u64,
+        }
+    });
+
+    tf.regs[7] = result;
+}
+
+
+pub fn sys_len(fd: usize, tf: &mut TrapFrame) {
+    let (result, size) = SCHEDULER.with_current_process_mut(tf, |process| {
+        if fd >= process.files.len() || process.files[fd].is_none() {
+            return (OsError::InvalidFile as u64, 0);
+        }
+
+        match process.files[fd].as_ref().unwrap().handle.size() {
+            Some(len) => (OsError::Ok as u64, len),
+            None => (OsError::IoError as u64, 0),
+        }
+    });
+
+    tf.regs[0] = size as u64;
+    tf.regs[7] = result;
+}
+
+pub fn sys_readdir(fd: usize, user_buf: usize, buf_len: usize, tf: &mut TrapFrame) {
+
+    let (result, bytes_read) = SCHEDULER.with_current_process_mut(tf, |process| {
+        if fd >= process.files.len() || process.files[fd].is_none() {
+            return (OsError::InvalidFile as u64, 0);
+        }
+
+        let file = process.files[fd].as_mut().unwrap();
+
+        // Ensure the file is actually a directory
+        if !file.handle.is_dir() {
+            return (OsError::InvalidDirectory as u64, 0);
+        }
+
+        // Validate user-space buffer before writing to it
+        let user_buffer = match unsafe { to_user_slice_mut(user_buf, buf_len) } {
+            Ok(buf) => buf,
+            Err(_) => {
+                return (OsError::BadAddress as u64, 0);
+            }
+        };
+
+        // Read directory entries into user buffer
+        match file.handle.readdir(user_buffer) {
+            Ok(bytes) if bytes > 0 => {
+                (OsError::Ok as u64, bytes)
+            }
+            Ok(_) => {
+                (OsError::IoErrorEof as u64, 0)
+            }
+            Err(_) => {
+                (OsError::InvalidDirectory as u64, 0)
+            }
+        }
+    });
+
+    tf.regs[0] = bytes_read as u64;
+    tf.regs[7] = result;
+}
+
+use crate::process::Process;
+use shim::path::Path;
+pub fn sys_exec(va: usize, tf: &mut TrapFrame) {
+    kprintln!("[sys_exec] Received request to exec at VA: {:#x}", va);
+
+    let path = match unsafe { to_user_slice(va, 256) } {
+        Ok(slice) => core::str::from_utf8(slice).unwrap_or(""),
+        Err(_) => {
+            tf.regs[7] = OsError::BadAddress as u64;
+            return;
+        }
+    };
+
+    kprintln!("[sys_exec] Executing: {}", path);
+
+    match Process::load(Path::new(path)) {
+        Ok(mut process) => {
+            kprintln!("[sys_exec] Process loaded successfully!");
+
+            // delete old process
+            let old_pid = SCHEDULER.kill(tf).expect("failed to kill proc {}");
+            assert!(old_pid == tf.tpidr);
+
+            // switch to new process
+            process.state = State::Running; // Set state to running
+            *tf = *process.context;  
+        }
+        Err(_) => {
+            kprintln!("[sys_exec] Failed to load process: '{}'", path);
+            tf.regs[7] = OsError::NoEntry as u64;
+        }
+    }
+}
+
+
+pub fn sys_fork(tf: &mut TrapFrame) {
+    kprintln!("[sys_fork] Forking process...");
+
+    let new_pid = SCHEDULER.with_current_process_mut(tf, |parent| {
+        let mut new_proc = parent.clone(); // Clone the parent process
+
+        kprintln!("[sys_fork] Cloned a process");
+
+        new_proc.state = State::Ready;
+        new_proc.context.regs[0] = 0; // Child returns 0
+        new_proc.context.ttbr1_el1 = new_proc.vmap.get_baddr().as_u64();
+
+        let pid = SCHEDULER.add(new_proc).unwrap(); // Add the new process to the scheduler
+
+        kprintln!("[sys_fork] Created child process with PID: {}", pid);
+
+        pid
+    });
+
+    // Parent returns child PID
+    tf.regs[0] = new_pid as u64;
+}

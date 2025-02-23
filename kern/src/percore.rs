@@ -37,6 +37,7 @@ static PER_CORE_DATA: [PerCore; NCORES] = [
     },
 ];
 
+
 /// Returns the current preemption counter of this core.
 pub fn get_preemptive_counter() -> i64 {
     let cpu = aarch64::affinity();

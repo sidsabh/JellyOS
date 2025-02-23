@@ -261,7 +261,6 @@ pub fn shell(prefix: &str) {
                         break 'exit;
                     }
                     Ok(command) if command.path() == "sleep" => {
-                        use crate::Duration;
                         if command.args.len() == 2
                             && let Some(ms) =
                                 command.args.last().and_then(|v| v.parse::<u32>().ok())

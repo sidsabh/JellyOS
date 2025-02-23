@@ -1,5 +1,6 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
+use fat32::vfat::VFatHandle;
 use shim::io;
 use shim::path::Path;
 
@@ -8,7 +9,7 @@ use smoltcp::socket::SocketHandle;
 
 use crate::console::kprintln;
 use crate::{param::*, FILESYSTEM};
-use crate::process::{Stack, State};
+use crate::process::*;
 use crate::traps::TrapFrame;
 use crate::vm::*;
 // use kernel_api::{OsError, OsResult};
@@ -30,6 +31,7 @@ pub struct Process {
     // Lab 5 2.C
     //// Socket handles held by the current process
     // pub sockets: Vec<SocketHandle>,
+    pub files: Vec<Option<ProcessFile>>, // Open file table
 }
 use kernel_api::{OsResult, OsError};
 use heap::align_down;
@@ -48,11 +50,28 @@ impl Process {
         
         let vmap = Box::new(upt);
 
+        let mut files = Vec::new();
+
+        // Open file descriptors 0, 1, 2 (stdin, stdout, stderr)
+        files.push(Some(ProcessFile {
+            handle: Box::new(ConsoleFile),
+            offset: 0
+        }));
+        files.push(Some(ProcessFile {
+            handle: Box::new(ConsoleFile),
+            offset: 0
+        }));
+        files.push(Some(ProcessFile {
+            handle: Box::new(ConsoleFile),
+            offset: 0
+        }));
+
         let p = Process {
             context,
             stack,
             vmap,
-            state
+            state,
+            files,
         };
 
         Ok(p)
@@ -81,6 +100,7 @@ impl Process {
         pstate.set_value(0b1_u64, PState::F);
         pstate.set_value(0b1_u64, PState::A);
         pstate.set_value(0b1_u64, PState::D);
+        pstate.set_value(0b000_u64, PState::M); // EL0
         p.context.pstate = pstate.get();
 
         Ok(p)
@@ -94,7 +114,7 @@ impl Process {
         use shim::io::Read;
         let mut file = FILESYSTEM.open_file(pn)?;
         let mut p = Process::new().expect("failed to create processs");
-        p.vmap.alloc(Process::get_stack_base(), PagePerm::RWX);
+        p.vmap.alloc(Process::get_stack_base(), PagePerm::RWX); // allocate one page for stack
         
         use alloc::vec;
         let mut data = vec![];
@@ -112,7 +132,7 @@ impl Process {
 
         // alloc some pages for user heap
         // TODO: add page fault handler to automatically handle this
-        let user_heap_pages = 2;
+        let user_heap_pages = 16; // user can allocate 1 MB heap
         for idx in (page_nums)..(page_nums+user_heap_pages) {
             let va = VirtualAddr::from(Process::get_image_base().as_usize()+PAGE_SIZE*idx);
             p.vmap.alloc(va, PagePerm::RWX);
@@ -160,22 +180,42 @@ impl Process {
     ///
     /// Returns `false` in all other cases.
     pub fn is_ready(&mut self) -> bool {
-        use core::mem::replace;
-        match replace(&mut self.state, State::Dead) {
-            State::Ready => {
+        let state = core::mem::replace(&mut self.state, State::Dead); // Temporarily remove state
+
+        if let State::Waiting(mut f) = state {
+            if let Some(mut func) = f.as_mut() && func(self) {
                 self.state = State::Ready;
-                true
-            }
-            State::Waiting(mut f) => {
-                let result = f(self);
-                self.state = State::Waiting(f);
-                result
-            }
-            state => {
-                self.state = state;
-                false
+                return true;
+            } else {
+                self.state = State::Waiting(f); // Restore the waiting state
+                return false;
             }
         }
+    
+        let is_ready = matches!(state, State::Ready);
+        self.state = state; // Restore state for non-waiting cases
+        is_ready
     }
     
+}
+
+impl Clone for Process {
+    fn clone(&self) -> Self {
+        // TODO: fix files
+        // let mut files = Vec::new();
+        // for file in self.files.iter() {
+        //     if let Some(f) = file {
+        //         files.push(Some(f.clone()));
+        //     } else {
+        //         files.push(None);
+        //     }
+        // }
+        Process {
+            context: self.context.clone(),
+            stack: self.stack.clone(),
+            vmap: self.vmap.clone(),
+            state: self.state.clone(),
+            files : alloc::vec![],
+        }
+    }
 }

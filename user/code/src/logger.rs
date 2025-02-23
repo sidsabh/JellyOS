@@ -12,9 +12,7 @@ impl log::Log for UserLogger {
 
     fn log(&self, record: &Record) {
         if self.enabled(record.metadata()) {
-            let level = record.level().to_string();
-            let log_text = record.args().to_string();
-            println!("[{}] {}", level, log_text);
+            println!("[{}] {}", record.level(), record.args());
         }
     }
 

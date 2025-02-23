@@ -60,14 +60,14 @@ unsafe fn setup_memory() {
         return;
     }
     
-    trace!("text beg: {:016x}, end: {:016x}",
+    debug!("text beg: {:016x}, end: {:016x}",
         addr_of!(__text_beg) as *const _ as u64, addr_of!(__text_end) as *const _ as u64
     );
-    trace!(
+    debug!(
         "bss  beg: {:016x}, end: {:016x}",
         addr_of!(__bss_beg) as *const _ as u64, addr_of!(__bss_end) as *const _ as u64
     );
-    trace!("heap beg: {:016x}, end: {:016x}", start, end);
+    debug!("heap beg: {:016x}, end: {:016x}", start, end);
 }
 
 extern "Rust" {

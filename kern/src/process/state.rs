@@ -11,25 +11,31 @@ use crate::process::Process;
 /// called on the next time slice.
 pub type EventPollFn = Box<dyn FnMut(&mut Process) -> bool + Send>;
 
-/// The scheduling state of a process.
 pub enum State {
-    /// The process is ready to be scheduled.
     Ready,
-    /// The process is waiting on an event to occur before it can be scheduled.
-    Waiting(EventPollFn),
-    /// The process is currently running.
+    Waiting(Option<EventPollFn>), // Wrap it in an Option
     Running,
-    /// The process is currently dead (ready to be reclaimed).
     Dead,
+}
+
+impl Clone for State {
+    fn clone(&self) -> Self {
+        match self {
+            State::Ready => State::Ready,
+            State::Running => State::Running,
+            State::Waiting(_) => State::Waiting(None), // Drop function when cloning
+            State::Dead => State::Dead,
+        }
+    }
 }
 
 impl fmt::Debug for State {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            State::Ready => write!(f, "State::Ready"),
-            State::Running => write!(f, "State::Running"),
-            State::Waiting(_) => write!(f, "State::Waiting"),
-            State::Dead => write!(f, "State::Dead"),
+        match self {
+            State::Ready => write!(f, "Ready"),
+            State::Running => write!(f, "Running"),
+            State::Waiting(_) => write!(f, "Waiting"),
+            State::Dead => write!(f, "Dead"),
         }
     }
 }

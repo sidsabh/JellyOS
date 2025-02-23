@@ -77,24 +77,24 @@ pub fn exit() -> ! {
     loop {}
 }
 
-pub fn write(b: u8) {
-    let mut ecode: u64;
+// pub fn write(b: u8) {
+//     let mut ecode: u64;
 
-    unsafe {
-        asm!(
-            "mov w0, {b:w}",
-            "svc {nr_write}",
-            "mov {ecode}, x7",
-            b = in(reg) b,
-            nr_write = const NR_WRITE,
-            ecode = out(reg) ecode,
-            out("x7") _,   // Clobbers x0
-            options(nostack),
-        );
-    }
+//     unsafe {
+//         asm!(
+//             "mov w0, {b:w}",
+//             "svc {nr_write}",
+//             "mov {ecode}, x7",
+//             b = in(reg) b,
+//             nr_write = const NR_WRITE,
+//             ecode = out(reg) ecode,
+//             out("x7") _,   // Clobbers x0
+//             options(nostack),
+//         );
+//     }
 
-    let _ = OsError::from(ecode);
-}
+//     let _ = OsError::from(ecode);
+// }
 
 pub fn write_str(msg: &str) {
     let mut ecode: u64;
@@ -177,3 +177,218 @@ pub fn sock_recv(descriptor: SocketDescriptor, buf: &mut [u8]) -> OsResult<usize
 }
 
 
+pub fn write(fd: usize, buf: &[u8]) -> OsResult<usize> {
+    let mut ecode: u64;
+    let mut bytes_written: u64;
+
+    unsafe {
+        asm!(
+            "mov x0, {fd}",
+            "mov x1, {buf_addr}",
+            "mov x2, {buf_len}",
+            "svc {nr_write}",
+            "mov {bytes_written}, x0",
+            "mov {ecode}, x7",
+            fd = in(reg) fd,
+            buf_addr = in(reg) buf.as_ptr(),
+            buf_len = in(reg) buf.len(),
+            nr_write = const NR_WRITE,
+            bytes_written = out(reg) bytes_written,
+            ecode = out(reg) ecode,
+            out("x0") _,   // Clobbers x0
+            out("x7") _,   // Clobbers x7
+            options(nostack),
+        );
+    }
+
+    err_or!(ecode, bytes_written as usize)
+}
+
+pub fn open(path: &str) -> OsResult<usize> {
+    let mut ecode: u64;
+    let mut fd: u64;
+    let mut buf = [0u8; 256];
+
+    // Ensure the path is null-terminated
+    let len = path.len().min(255);  // Prevent buffer overflow
+    buf[..len].copy_from_slice(&path.as_bytes()[..len]);
+    buf[len] = 0;  // Null-terminate the string
+
+    unsafe {
+        asm!(
+            "mov x0, {path_addr}",
+            "svc {nr_open}",
+            "mov {fd}, x0",
+            "mov {ecode}, x7",
+            path_addr = in(reg) buf.as_ptr(),
+            nr_open = const NR_OPEN,
+            fd = out(reg) fd,
+            ecode = out(reg) ecode,
+            out("x0") _,   // Clobbers x0
+            out("x7") _,   // Clobbers x7
+            options(nostack),
+        );
+    }
+
+    err_or!(ecode, fd as usize)
+}
+
+
+pub fn close(fd: usize) -> OsResult<()> {
+    let mut ecode: u64;
+
+    unsafe {
+        asm!(
+            "mov x0, {fd}",
+            "svc {nr_close}",
+            "mov {ecode}, x7",
+            fd = in(reg) fd,
+            nr_close = const NR_CLOSE,
+            ecode = out(reg) ecode,
+            out("x7") _,   // Clobbers x7
+            options(nostack),
+        );
+    }
+
+    err_or!(ecode, ())
+}
+
+pub fn read(fd: usize, buf: &mut [u8]) -> OsResult<usize> {
+    let mut ecode: u64;
+    let mut bytes_read: u64;
+
+    unsafe {
+        asm!(
+            "mov x0, {fd}",
+            "mov x1, {buf_addr}",
+            "mov x2, {buf_len}",
+            "svc {nr_read}",
+            "mov {bytes_read}, x0",
+            "mov {ecode}, x7",
+            fd = in(reg) fd,
+            buf_addr = in(reg) buf.as_mut_ptr(),
+            buf_len = in(reg) buf.len(),
+            nr_read = const NR_READ,
+            bytes_read = out(reg) bytes_read,
+            ecode = out(reg) ecode,
+            out("x0") _,   // Clobbers x0
+            out("x7") _,   // Clobbers x7
+            options(nostack),
+        );
+    }
+
+    err_or!(ecode, bytes_read as usize)
+}
+
+pub fn seek(fd: usize, offset: usize) -> OsResult<()> {
+    let mut ecode: u64;
+
+    unsafe {
+        asm!(
+            "mov x0, {fd}",
+            "mov x1, {offset}",
+            "svc {nr_seek}",
+            "mov {ecode}, x7",
+            fd = in(reg) fd,
+            offset = in(reg) offset,
+            nr_seek = const NR_SEEK,
+            ecode = out(reg) ecode,
+            out("x7") _,   // Clobbers x7
+            options(nostack),
+        );
+    }
+
+    err_or!(ecode, ())
+}
+
+pub fn len(fd: usize) -> OsResult<usize> {
+    let mut ecode: u64;
+    let mut size: u64;
+
+    unsafe {
+        asm!(
+            "mov x0, {fd}",
+            "svc {nr_len}",
+            "mov {size}, x0",
+            "mov {ecode}, x7",
+            fd = in(reg) fd,
+            nr_len = const NR_LEN,
+            size = out(reg) size,
+            ecode = out(reg) ecode,
+            out("x0") _,   // Clobbers x0
+            out("x7") _,   // Clobbers x7
+            options(nostack),
+        );
+    }
+
+    err_or!(ecode, size as usize)
+}
+
+
+pub fn readdir(fd: usize, buf: &mut [u8]) -> OsResult<usize> {
+    let mut ecode: u64;
+    let mut bytes_read: u64;
+
+    unsafe {
+        asm!(
+            "mov x0, {fd}",
+            "mov x1, {buf_addr}",
+            "mov x2, {buf_len}",
+            "svc {nr_readdir}",
+            "mov {bytes_read}, x0",
+            "mov {ecode}, x7",
+            fd = in(reg) fd,
+            buf_addr = in(reg) buf.as_mut_ptr(),
+            buf_len = in(reg) buf.len(),
+            nr_readdir = const NR_READDIR,
+            bytes_read = out(reg) bytes_read,
+            ecode = out(reg) ecode,
+            out("x0") _, // Clobber registers
+            out("x7") _, 
+            options(nostack),
+        );
+    }
+
+    err_or!(ecode, bytes_read as usize)
+}
+
+
+pub fn fork() -> OsResult<usize> {
+    let mut ecode: u64;
+    let mut pid: u64;
+
+    unsafe {
+        asm!(
+            "svc {nr_fork}",
+            "mov {pid}, x0",
+            "mov {ecode}, x7",
+            nr_fork = const NR_FORK,
+            pid = out(reg) pid,
+            ecode = out(reg) ecode,
+            out("x0") _,   // Clobbers x0
+            out("x7") _,   // Clobbers x7
+            options(nostack),
+        );
+    }
+
+    err_or!(ecode, pid as usize)
+}
+
+pub fn exec(path: &str) -> OsResult<()> {
+    let mut ecode: u64;
+
+    unsafe {
+        asm!(
+            "mov x0, {path_addr}",
+            "svc {nr_exec}",
+            "mov {ecode}, x7",
+            path_addr = in(reg) path.as_ptr(),
+            nr_exec = const NR_EXEC,
+            ecode = out(reg) ecode,
+            out("x7") _,   // Clobbers x7
+            options(nostack),
+        );
+    }
+
+    err_or!(ecode, ())
+}

@@ -18,7 +18,9 @@ use crate::console::kprint;
 use crate::console::kprintln;
 use crate::mutex::Mutex;
 use crate::net::uspi::TKernelTimerHandle;
+use crate::param;
 use crate::param::*;
+use crate::percore;
 use crate::percore::{get_preemptive_counter, is_mmu_ready, local_irq};
 use crate::process::{Id, Process, State};
 use crate::traps::irq::IrqHandlerRegistry;
@@ -32,11 +34,68 @@ use crate::{ETHERNET, USB};
 pub struct GlobalScheduler(Mutex<Option<Box<Scheduler>>>);
 
 
+use core::sync::atomic::{AtomicBool, Ordering};
+
+pub static IDLE_PROCS: [Mutex<Option<Box<Process>>>; param::NCORES] = [
+    Mutex::new(None),
+    Mutex::new(None),
+    Mutex::new(None),
+    Mutex::new(None),
+];
+
+
+fn is_idle(id : Id) -> bool {
+    id >= u64::MAX - (param::NCORES as u64) - 1
+}
+
 impl GlobalScheduler {
     /// Returns an uninitialized wrapper around a local scheduler.
     pub const fn uninitialized() -> GlobalScheduler {
         GlobalScheduler(Mutex::new(None))
     }
+
+    fn init_idle_procs() {
+        for i in 0..NCORES {
+            let mut idle_proc = IDLE_PROCS[i].lock();
+            *idle_proc = Some(Box::new(Process::new().expect("Failed to create idle process")));
+            
+            let mut tf = *idle_proc.as_mut().unwrap().context;
+            tf.sp = Process::get_stack_top().as_u64();
+            tf.pc = Process::get_image_base().as_u64();
+            let mut pstate = PState::new(0);
+            pstate.set_value(0b1_u64, PState::F);
+            pstate.set_value(0b1_u64, PState::A);
+            pstate.set_value(0b1_u64, PState::D);
+            tf.pstate = pstate.get();
+            tf.tpidr = u64::MAX - i as u64;
+            tf.ttbr0_el1 = crate::VMM.get_baddr().as_u64();
+            let upt = crate::vm::UserPageTable::new();
+            let mut vmap = Box::new(upt);
+            tf.ttbr1_el1 = vmap.get_baddr().as_u64();
+            GlobalScheduler::load_code(&mut vmap, idle_proc_code as *const u8);
+        }
+    }
+
+    fn switch_to_idle() {
+
+        let frame_addr = {
+            let mut idle_proc = IDLE_PROCS[aarch64::affinity()].lock();
+            let idle_proc = idle_proc.as_mut().unwrap();
+            idle_proc.state = State::Running;
+            idle_proc.context.as_ref() as *const TrapFrame as *const u64 as u64
+        };
+
+        unsafe {
+            asm!(
+                "mov x0, {context:x}",
+                "bl idle_context_restore",
+                "eret",
+                context = in(reg) frame_addr,
+            );
+        }
+    }
+
+
 
     /// Enters a critical region and execute the provided closure with a mutable
     /// reference to the inner scheduler.
@@ -54,6 +113,15 @@ impl GlobalScheduler {
         self.critical(move |scheduler| scheduler.add(process))
     }
 
+    pub fn with_current_process_mut<F, R>(&self, tf: &TrapFrame, f: F) -> R
+    where
+        F: FnOnce(&mut Process) -> R,
+    {
+        self.critical(|scheduler| {
+            let process = scheduler.find_process(tf).expect("No running process found");
+            f(process)
+        })
+    }
     /// Performs a context switch using `tf` by setting the state of the current
     /// process to `new_state`, saving `tf` into the current process, and
     /// restoring the next process's trap frame into `tf`. For more details, see
@@ -66,6 +134,24 @@ impl GlobalScheduler {
                 scheduler.schedule_out(new_state, &mut old_tf);
             });
         }
+        id
+    }
+
+    pub fn block(&self, new_state: State, tf: &mut TrapFrame) -> Id {
+        let mut old_tf = tf.clone();
+        let id = self.switch_to(tf);
+
+        self.critical(|scheduler| {
+            scheduler.schedule_out(new_state, &mut old_tf);
+        });
+        
+        if id != u64::MAX {
+            return id;
+        }
+
+        // get idle process for this core
+        Self::switch_to_idle();
+        
         id
     }
 
@@ -126,7 +212,7 @@ impl GlobalScheduler {
         let upt = crate::vm::UserPageTable::new();
         let mut vmap = Box::new(upt);
         tf.ttbr1_el1 = vmap.get_baddr().as_u64();
-        self.load_code(&mut vmap, idle_proc as *const u8);
+        GlobalScheduler::load_code(&mut vmap, idle_proc_code as *const u8);
         let frame_addr = tf.as_ref() as *const TrapFrame as *const u64 as u64;
 
         unsafe {
@@ -137,6 +223,7 @@ impl GlobalScheduler {
                 context = in(reg) frame_addr,
             );
         }
+        Self::switch_to_idle();
         loop {}
     }
 
@@ -163,6 +250,9 @@ impl GlobalScheduler {
             Box::new(|tf: &mut TrapFrame| {
                 // tf was the interrupted processes' trap frame
                 pi::local_interrupt::local_tick_in(aarch64::affinity(), crate::param::TICK);
+                // kprintln!("interrupt at core {} with tpidr {}", aarch64::affinity(), tf.tpidr);
+
+
                 self.switch(State::Ready, tf); // context switch
 
                 // kprintln!("interrupt");
@@ -189,20 +279,24 @@ impl GlobalScheduler {
     /// Initializes the scheduler and add userspace processes to the Scheduler.
     pub unsafe fn initialize(&self) {
         *self.0.lock() = Some(Box::new(Scheduler::new()));
+        Self::init_idle_procs();
 
-         for _ in 0..NCORES*2 {
-         //for _ in 0..1 {
-            use shim::path::Path;
-            let p = Process::load(Path::new("/programs/fib.bin")).expect("failed to load fib proc");
-            self.add(p);
-        }
+        use shim::path::Path;
+        let p = Process::load(Path::new("/programs/shell.bin")).expect("failed to load test proc");
+        self.add(p);
+
+        // for _ in 0..NCORES*2 {
+        //     use shim::path::Path;
+        //     let p = Process::load(Path::new("/programs/fib.bin")).expect("failed to load fib proc");
+        //     self.add(p);
+        // }
     }
 
     // The following method may be useful for testing Lab 4 Phase 3:
     //
     // * A method to load a extern function to the user process's page table.
     //
-    pub fn load_code(&self, vmap: &mut Box<UserPageTable>, f: *const u8) {
+    pub fn load_code(vmap: &mut Box<UserPageTable>, f: *const u8) {
         use crate::vm::{PagePerm, VirtualAddr};
 
         let page: &mut [u8] = vmap
@@ -260,6 +354,13 @@ impl Scheduler {
     /// If the `processes` queue is empty or there is no current process,
     /// returns `false`. Otherwise, returns `true`.
     fn schedule_out(&mut self, new_state: State, tf: &mut TrapFrame) -> bool {
+
+        // check for idle proc
+        if is_idle(tf.tpidr) {
+            return false;
+        }
+
+
         for (i, p) in self.processes.iter_mut().enumerate() {
             if matches!(p.state, State::Running) && p.context.tpidr == tf.tpidr {
                 p.state = new_state;
@@ -372,12 +473,9 @@ pub extern "C" fn test_user_process() -> ! {
 
 use core::arch::asm;
 
-use crate::shell;
-
-extern "C" fn idle_proc() {
+extern "C" fn idle_proc_code() {
     loop {
-        // kprintln!("idle proc here");
-        // timer::spin_sleep(Duration::from_secs(1));
+        core::hint::spin_loop();
     }
 }
 

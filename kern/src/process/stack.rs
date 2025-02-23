@@ -68,3 +68,17 @@ impl fmt::Debug for Stack {
             .finish()
     }
 }
+
+impl Clone for Stack {
+    fn clone(&self) -> Self {
+        let new_stack = Stack::new().expect("Failed to clone stack");
+        unsafe {
+            core::ptr::copy_nonoverlapping(
+                self.ptr.as_ptr(),
+                new_stack.ptr.as_ptr(),
+                Stack::SIZE,
+            );
+        }
+        new_stack
+    }
+}

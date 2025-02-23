@@ -7,9 +7,7 @@ pub use self::pagetable::*;
 use aarch64::*;
 use core::arch::asm;
 use core::sync::atomic::{AtomicUsize, Ordering};
-use core::time::Duration;
 
-use crate::console::kprintln;
 use crate::mutex::Mutex;
 use crate::param::{KERNEL_MASK_BITS, USER_MASK_BITS};
 use crate::percore::{is_mmu_ready, set_mmu_ready};
@@ -102,7 +100,6 @@ impl VMManager {
 
         unsafe {
             self.setup();
-            set_mmu_ready();
         }
 
         info!("MMU is ready for core-{}/@sp={:016x}", affinity(), SP.get());

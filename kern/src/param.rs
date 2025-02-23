@@ -13,7 +13,7 @@ pub const PAGE_MASK: usize = !(PAGE_SIZE - 1);
 pub const USER_MASK_BITS: usize = 34;
 pub const KERNEL_MASK_BITS: usize = 31;
 
-pub const USER_IMG_BASE: usize = 0xffff_ffff_c000_0000;
+pub const USER_IMG_BASE: usize = 0xffff_ffff_c000_0000; // top 34 bits are 1
 const_assert_eq!(
     USER_IMG_BASE,
     ((1 << USER_MASK_BITS) - 1) << (64 - USER_MASK_BITS)
@@ -28,7 +28,7 @@ pub const KERN_STACK_SIZE: usize = PAGE_SIZE;
 
 /// The `tick` time.
 // FIXME: When you're ready, change this to something more reasonable.
-pub const TICK: Duration = Duration::from_millis(10);
+pub const TICK: Duration = Duration::from_millis(100);
 //pub const TICK: Duration = Duration::from_secs(1);
 
 // Match this value with `HZ` in `timer.h`
@@ -37,3 +37,6 @@ pub const USPI_TIMER_HZ: usize = 10;
 // Match this value with `USPI_FRAME_BUFFER_SIZE` in `uspi.h`
 pub const USPI_FRAME_BUFFER_SIZE: u32 = 1600;
 pub const MTU: u32 = 1500;
+
+
+pub const NCORES: usize = 4;

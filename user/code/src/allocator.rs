@@ -83,7 +83,7 @@ extern "C" {
 }
 const PAGE_SIZE : usize = 64 * 1024;
 const USER_IMG_BASE : usize = 0xffff_ffff_c000_0000;
-const USER_HEAP_PAGES : usize = 2;
+const USER_HEAP_PAGES : usize = 16;
 
 
 /// Returns the (start address, end address) of the available memory on this

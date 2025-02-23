@@ -32,16 +32,13 @@ impl<T> Mutex<T> {
 
 use crate::percore::*;
 impl<T> Mutex<T> {
-    // Once MMU/cache is enabled, do the right thing here. For now, we don't
-    // need any real synchronization.
     pub fn try_lock(&self) -> Option<MutexGuard<T>> {
         if is_mmu_ready() {
             if !self
                 .lock
                 .swap(true, Ordering::Acquire)
-                // || self.owner.load(Ordering::Acquire) == this // fix re-entrant maybe store owner in lock
             {
-                self.owner.store(getcpu(), Ordering::Release);
+                self.owner.store(getcpu(), Ordering::Relaxed);
                 Some(MutexGuard { lock: &self })
             } else {
                 None
@@ -59,8 +56,6 @@ impl<T> Mutex<T> {
         }
     }
 
-    // Once MMU/cache is enabled, do the right thing here. For now, we don't
-    // need any real synchronization.
     #[inline(never)]
     pub fn lock(&self) -> MutexGuard<T> {
         // Wait until we can "aquire" the lock, then "acquire" it.

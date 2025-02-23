@@ -30,6 +30,7 @@ impl Page {
 
 #[repr(C)]
 #[repr(align(65536))]
+#[derive(Copy, Clone)]
 pub struct L2PageTable {
     pub entries: [RawL2Entry; 8192],
 }
@@ -76,6 +77,7 @@ impl L3Entry {
 
 #[repr(C)]
 #[repr(align(65536))]
+#[derive(Copy, Clone)]
 pub struct L3PageTable {
     pub entries: [L3Entry; 8192],
 }
@@ -97,6 +99,7 @@ impl L3PageTable {
 
 #[repr(C)]
 #[repr(align(65536))]
+#[derive(Copy, Clone)]
 pub struct PageTable {
     pub l2: L2PageTable,
     pub l3: [L3PageTable; 3],
@@ -108,6 +111,8 @@ impl PageTable {
     fn new(perm: u64) -> Box<PageTable> {
         let mut pt = Box::new(PageTable {
             l2: L2PageTable::new(),
+            // hard coded to 3 PTs, each of 8K entries of 64KB pages
+            // 3 * 2^13 * 2^16 = 3 * 2^29
             l3: [L3PageTable::new(), L3PageTable::new(), L3PageTable::new()],
         });
 
@@ -164,7 +169,7 @@ impl PageTable {
     /// Returns a base address of the pagetable. The returned `PhysicalAddr` value
     /// will point the start address of the L2PageTable.
     pub fn get_baddr(&self) -> PhysicalAddr {
-        PhysicalAddr::from(self as *const PageTable as *const u64 as u64)
+        PhysicalAddr::from(self as *const _ as u64)
     }
 }
 
@@ -179,15 +184,17 @@ impl<'a> IntoIterator for &'a PageTable {
 }
 
 use core::slice::IterMut;
+
 impl<'a> IntoIterator for &'a mut PageTable {
     type Item = &'a mut L3Entry;
-    type IntoIter = Chain<IterMut<'a, L3Entry>, IterMut<'a, L3Entry>>;
+    type IntoIter = core::iter::FlatMap<
+        core::slice::IterMut<'a, L3PageTable>,
+        IterMut<'a, L3Entry>,
+        fn(&'a mut L3PageTable) -> IterMut<'a, L3Entry>,
+    >;
 
     fn into_iter(self) -> Self::IntoIter {
-        let (first, second) = self.l3.split_at_mut(1);
-        let iter1 = first[0].entries.iter_mut();
-        let iter2 = second[0].entries.iter_mut();
-        iter1.chain(iter2)
+        self.l3.iter_mut().flat_map(|table| table.entries.iter_mut())
     }
 }
 
@@ -377,5 +384,46 @@ impl fmt::Debug for PageTable {
             .field("l2", &self.l2)
             .field("l3", &self.l3)
             .finish()
+    }
+}
+
+
+
+impl UserPageTable {
+    fn get_page_slice(&self, va: VirtualAddr) -> &[u8] {
+        let (l2_idx, l3_idx) = PageTable::locate(va);
+        let entry = &self.l3[l2_idx].entries[l3_idx];
+        if entry.is_valid() {
+            let addr = entry.0.get_masked(RawL3Entry::ADDR) as *const u8;
+            unsafe { core::slice::from_raw_parts(addr, Page::SIZE) }
+        } else {
+            panic!("Invalid page entry");
+        }
+    }
+}
+
+impl Clone for UserPageTable {
+    fn clone(&self) -> Self {
+        let mut new_page_table = UserPageTable::new();
+
+        for (l2_idx, l3_table) in self.l3.iter().enumerate() {
+            for (l3_idx, entry) in l3_table.entries.iter().enumerate() {
+                if entry.is_valid() {
+                    let old_phys_addr = entry.0.get_masked(RawL3Entry::ADDR);
+                    let virt_addr = VirtualAddr::from(USER_IMG_BASE+ (l2_idx << 29) | (l3_idx << 16));
+
+                    // Allocate a new page
+                    let new_page_slice = new_page_table.alloc(virt_addr, PagePerm::RWX);
+
+                    // Get the old page slice
+                    let old_page_slice = self.get_page_slice(virt_addr);
+
+                    // Copy the data
+                    new_page_slice.copy_from_slice(old_page_slice);
+                }
+            }
+        }
+
+        new_page_table
     }
 }

@@ -38,10 +38,7 @@ struct Console;
 
 impl fmt::Write for Console{
     fn write_str(&mut self, s: &str) -> fmt::Result {
-        for b in s.bytes() {
-            syscall::write(b);
-        }
-
+        syscall::write(1, s.as_bytes()).unwrap();
         Ok(())
     }
 }
