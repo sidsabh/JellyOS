@@ -373,25 +373,50 @@ pub fn fork() -> OsResult<usize> {
     Ok(pid as usize) // TODO: not good error code
 }
 
-pub fn exec(path: &str) -> OsResult<()> {
+pub fn exec(path: &str, argv: &[&str]) -> OsResult<()> {
     let mut ecode: u64;
-    let mut buf = [0u8; 256]; // Ensure buffer size is large enough
+    let mut path_buf = [0u8; 256]; // Ensure buffer size is large enough
 
-    // Copy and null-terminate the string
-    let len = path.len().min(255);  // Prevent buffer overflow
-    buf[..len].copy_from_slice(&path.as_bytes()[..len]);
-    buf[len] = 0;  // Null-terminate the string
+    // Copy and null-terminate the path string
+    let len = path.len().min(255);
+    path_buf[..len].copy_from_slice(&path.as_bytes()[..len]);
+    path_buf[len] = 0; // Null-terminate
 
+    // Allocate space for argv pointers
+    let mut argv_buf: [u64; 64] = [0; 64]; // Max 64 arguments
+    let mut str_buf = [0u8; 1024]; // Store all arguments in a buffer
+    let mut str_offset = 0;
+
+    for (i, arg) in argv.iter().enumerate() {
+        if i >= argv_buf.len() - 1 {
+            break; // Prevent overflow
+        }
+
+        let arg_len = arg.len().min(255);
+        let arg_ptr = str_buf.as_ptr() as usize + str_offset;
+        
+        // Copy argument into the buffer
+        str_buf[str_offset..str_offset + arg_len].copy_from_slice(arg.as_bytes());
+        str_buf[str_offset + arg_len] = 0; // Null-terminate
+
+        argv_buf[i] = arg_ptr as u64;
+        str_offset += arg_len + 1;
+    }
+
+    // Null-terminate the argv list
+    argv_buf[argv.len()] = 0;
 
     unsafe {
         asm!(
             "mov x0, {path_addr}",
+            "mov x1, {argv_addr}",
             "svc {nr_exec}",
             "mov {ecode}, x7",
-            path_addr = in(reg) buf.as_ptr(),
+            path_addr = in(reg) path_buf.as_ptr(),
+            argv_addr = in(reg) argv_buf.as_ptr(),
             nr_exec = const NR_EXEC,
             ecode = out(reg) ecode,
-            out("x7") _,   // Clobbers x7
+            out("x7") _, // Clobbers x7
             options(nostack),
         );
     }

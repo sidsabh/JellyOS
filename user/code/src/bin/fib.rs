@@ -15,7 +15,7 @@ use crate::alloc::vec;
 use crate::alloc::vec::Vec;
 
 #[no_mangle]
-fn main() {
+fn main(argc: usize, argv_ptr: *const *const u8) {
     let pid = syscall::getpid();
     let beg = syscall::time();
     println!("[{:02}] Started: {:?}", pid, beg);

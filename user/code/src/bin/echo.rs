@@ -7,7 +7,7 @@ use user::*;
 use kernel_api::OsResult;
 
 #[no_mangle]
-fn main() {
+fn main(argc: usize, argv_ptr: *const *const u8) {
     let result = main_inner();
     if let Err(error) = result {
         println!("Terminating with error: {:?}", error);

@@ -485,41 +485,76 @@ pub fn sys_exec(va: usize, tf: &mut TrapFrame) {
     let path = match unsafe { to_user_slice(va, 256) } {
         Ok(slice) => core::str::from_utf8(slice).unwrap_or(""),
         Err(_) => {
-            // kprintln!("[sys_exec] Error: Invalid address");
             tf.regs[7] = OsError::BadAddress as u64;
             return;
         }
     };
     let clean_path = path.trim_end_matches('\0');
 
-    // kprintln!("[sys_exec] Executing: '{}'", path);
+    // Instead of reading argv from the stack, get it from tf.regs[1]
+    let argv_ptr = tf.regs[1] as usize;
+    let mut args = alloc::vec![];
 
-    // Read arguments (argv) from stack
-    let args = alloc::vec![];
-    // kprintln!("[sys_exec] Args: {:?}", args);
-
-    // Run `execve` and handle any errors
-    let res = SCHEDULER.with_current_process_mut(tf, |process| {
-        match Process::execve(process, Path::new(clean_path), args) {
-            Ok(_) => {
-                OsError::Ok as u64
+    if argv_ptr != 0 {
+        // For example, assume the argv buffer is 256 bytes long.
+        let argv_slice = match unsafe { to_user_slice(argv_ptr, 256) } {
+            Ok(slice) => slice,
+            Err(_) => {
+                tf.regs[7] = OsError::BadAddress as u64;
+                return;
             }
-            Err(e) => {
-                OsError::InvalidFile as u64
+        };
+        // Assume the first 8 bytes is argc (u64 in native endian)
+        if argv_slice.len() >= 8 {
+            let argc = u64::from_ne_bytes(argv_slice[0..8].try_into().unwrap()) as usize;
+            // For each argument pointer (assume 8 bytes each) follow with the string.
+            for i in 0..argc {
+                let start = 8 + i * 8;
+                let end = start + 8;
+                if end > argv_slice.len() { break; }
+                let ptr_bytes: [u8;8] = argv_slice[start..end].try_into().unwrap();
+                let arg_ptr = u64::from_ne_bytes(ptr_bytes) as *const u8;
+                if arg_ptr.is_null() { break; }
+                // Read the null-terminated string from user memory.
+                let arg_str = unsafe {
+                    let mut len = 0;
+                    while core::ptr::read(arg_ptr.add(len)) != 0 {
+                        len += 1;
+                    }
+                    core::str::from_utf8(core::slice::from_raw_parts(arg_ptr, len)).unwrap_or("[Invalid UTF-8]")
+                };
+                args.push(arg_str);
             }
         }
-    });
-    use crate::GlobalScheduler;
-    match res {
-        x if x == OsError::Ok as u64 => {
-            GlobalScheduler::switch_to_user(tf);
-        }
-        _ => {}
     }
 
+    kprintln!("[sys_exec] Executing: '{}'", clean_path);
+    kprintln!("[sys_exec] Args: {:?}", args);
+
+    // Run execve() and update process.context, etc.
+    let new_tf = SCHEDULER.with_current_process_mut(tf, |process| {
+        match Process::execve(process, Path::new(clean_path), args.clone()) {
+            Ok(_) => Some(*process.context),
+            Err(_) => None,
+        }
+    });
+
+    use crate::GlobalScheduler;
+    kprintln!("[sys_exec] tf: {:#x?}", new_tf);
+    match new_tf {
+        Some(context) => {
+            kprintln!("[sys_exec] Switching to user mode at {:#x}", context.pc);
+            GlobalScheduler::switch_to_user(&context);
+        }
+        None => {
+            kprintln!("[sys_exec] ERROR: execve() failed!");
+            tf.regs[7] = OsError::InvalidFile as u64;
+        }
+    }
     kprintln!("[sys_exec] ERROR: execve() should not return!");
-    tf.regs[7] = res;
+    tf.regs[7] = OsError::InvalidFile as u64;
 }
+
 
 
 
@@ -532,6 +567,8 @@ pub fn sys_fork(tf: &mut TrapFrame) {
     });
     new_proc.state = State::Ready;
     *new_proc.context = *tf; // Updated frame
+    // print tf:
+    kprintln!("[sys_fork] tf: {:#x?}", tf);
     new_proc.context.regs[0] = 0; // Child returns 0
     new_proc.context.ttbr1_el1 = new_proc.vmap.get_baddr().as_u64();
     

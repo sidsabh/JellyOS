@@ -1,4 +1,6 @@
 #![no_std]
+#![feature(naked_functions)]
+
 use core::ptr::addr_of;
 use core::mem::zeroed;
 use core::panic::PanicInfo;
@@ -32,7 +34,7 @@ fn panic(_info: &PanicInfo) -> ! {
     syscall::exit();
 }
 
-
+#[no_mangle]
 unsafe fn setup_memory() {
     // zero bss
     extern "C" {
@@ -67,7 +69,7 @@ unsafe fn setup_memory() {
         "bss  beg: {:016x}, end: {:016x}",
         addr_of!(__bss_beg) as *const _ as u64, addr_of!(__bss_end) as *const _ as u64
     );
-    debug!("heap beg: {:016x}, end: {:016x}", start, end);
+    trace!("heap beg: {:016x}, end: {:016x}", start, end);
 }
 
 extern "Rust" {
@@ -75,9 +77,28 @@ extern "Rust" {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn _start() -> ! {
-    setup_memory();
-    main();
-    kernel_api::syscall::exit();
+fn call_exit() -> ! {
+    syscall::exit();
 }
 
+
+#[no_mangle]
+#[naked]
+pub unsafe extern "C" fn _start() -> ! {
+    core::arch::naked_asm!(
+        "
+        mov x10, x0       // Save argc
+        mov x11, x1       // Save argv
+
+        bl setup_memory     // Call setup_memory()
+
+        // Restore registers before calling main()
+        mov x0, x10
+        mov x1, x11
+        bl main
+
+
+        bl call_exit       // Exit when main returns
+        ",
+    );
+}

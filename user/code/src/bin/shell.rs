@@ -43,7 +43,7 @@ fn normalize_path(path: &str) -> String {
 
 
 #[no_mangle]
-fn main() {
+fn main(argc: usize, argv_ptr: *const *const u8) {
     println!("{}", WELCOME_TXT);
 
     let mut pwd = ROOT_NAME.to_string();
@@ -202,17 +202,28 @@ fn main() {
             }
             _ if args[0].starts_with("./") || args[0].starts_with("/") => {
                 let mut path = args[0].to_string();
+                
+                // Prepend current directory if path is relative
                 if !path.starts_with("/") {
                     let cleaned_path = path.trim_start_matches("./");
                     path = format!("{}/{}", pwd.trim_end_matches('/'), cleaned_path);
                 }
-
+            
                 let pid = syscall::fork();
                 println!("forked with pid: {:?}", pid);
+            
                 match pid {
                     Ok(0) => {
-                        // Child process: Execute the new program
-                        if syscall::exec(&path).is_err() {
+                        // Child process: Prepare arguments
+                        let argv: Vec<String> = args.iter().map(|s| s.to_string()).collect();
+            
+                        let argv_refs: Vec<&str> = argv.iter().map(|s| s.as_str()).collect();
+
+                        // print argv:
+                        println!("argv: {:?}", argv_refs);
+
+    
+                        if syscall::exec(&path, &argv_refs).is_err() {
                             println!("error: failed to execute {}", path);
                             syscall::exit();
                         }
@@ -227,6 +238,7 @@ fn main() {
                     }
                 }
             }
+            
             _ => {
                 println!("unknown command: {}", args[0]);
             }

@@ -76,7 +76,7 @@ impl GlobalScheduler {
         }
     }
 
-    fn switch_to_idle() {
+    pub fn switch_to_idle() {
 
         let frame_addr = {
             let mut idle_proc = IDLE_PROCS[aarch64::affinity()].lock();

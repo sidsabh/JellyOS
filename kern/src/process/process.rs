@@ -114,9 +114,6 @@ impl Process {
             page.iter_mut().for_each(|x| *x = 0);
         }
     
-        // Reset process trap frame
-        process.context = Box::new(TrapFrame::default());
-    
         // Set stack pointer
         process.context.sp = Process::get_stack_top().as_u64();
     
@@ -148,6 +145,9 @@ impl Process {
         unsafe {
             core::ptr::copy(argv_pointers.as_ptr(), argv_base as *mut u64, argv_pointers.len());
         }
+
+
+
     
         // Align stack
         let aligned_sp = (argv_base as usize & !0xF) as *mut u64;
