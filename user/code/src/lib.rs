@@ -87,18 +87,51 @@ fn call_exit() -> ! {
 pub unsafe extern "C" fn _start() -> ! {
     core::arch::naked_asm!(
         "
-        mov x10, x0       // Save argc
-        mov x11, x1       // Save argv
+        sub sp, sp, #16        // Allocate space on stack
+        str x0, [sp, #8]       // Store argc
+        str x1, [sp]           // Store argv
 
-        bl setup_memory     // Call setup_memory()
+        bl setup_memory   // Call setup_memory()
 
-        // Restore registers before calling main()
-        mov x0, x10
-        mov x1, x11
-        bl main
+        ldr x0, [sp, #8]       // Load argc into x0
+        ldr x1, [sp]           // Load argv into x1
 
+        bl main           // Call main(argc, argv)
 
         bl call_exit       // Exit when main returns
         ",
     );
+}
+
+#[no_mangle]
+pub extern "C" fn debug_print_regs(argc: usize, argv: *const *const u8) {
+    println!("[DEBUG] _start before main: argc = {}, argv_ptr = {:#x}", argc, argv as usize);
+}
+
+
+use alloc::vec::Vec;
+use alloc::string::String;
+use core::ptr;
+use core::str::from_utf8;
+
+
+
+pub fn get_args(argc: usize, argv_ptr: *const *const u8) -> Vec<String> {
+    let mut args: Vec<String> = Vec::new();
+    for i in 0..argc {
+        let arg_ptr = unsafe { *argv_ptr.add(i) };
+        if arg_ptr.is_null() {
+            break;
+        }
+        let mut len = 0;
+        unsafe {
+            while ptr::read(arg_ptr.add(len)) != 0 {
+                len += 1;
+            }
+        }
+        let arg_slice = unsafe { core::slice::from_raw_parts(arg_ptr, len) };
+        let arg_str = from_utf8(arg_slice).unwrap_or("[Invalid UTF-8]");
+        args.push(String::from(arg_str));
+    }
+    args
 }

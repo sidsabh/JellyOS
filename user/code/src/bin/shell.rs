@@ -210,7 +210,7 @@ fn main(argc: usize, argv_ptr: *const *const u8) {
                 }
             
                 let pid = syscall::fork();
-                println!("forked with pid: {:?}", pid);
+                trace!("forked with pid: {:?}", pid);
             
                 match pid {
                     Ok(0) => {
@@ -220,7 +220,7 @@ fn main(argc: usize, argv_ptr: *const *const u8) {
                         let argv_refs: Vec<&str> = argv.iter().map(|s| s.as_str()).collect();
 
                         // print argv:
-                        println!("argv: {:?}", argv_refs);
+                        trace!("argv: {:?}", argv_refs);
 
     
                         if syscall::exec(&path, &argv_refs).is_err() {
@@ -229,9 +229,10 @@ fn main(argc: usize, argv_ptr: *const *const u8) {
                         }
                     }
                     Ok(pid) => {
-                        info!("created child process with PID {}", pid);
+                        trace!("created child process with PID {}", pid);
                         // TODO: add child descriptors, wait, etc.
-                        // syscall::wait();
+                        info!("waiting for child process with PID {}", pid);
+                        let _ = syscall::wait(pid);
                     }
                     Err(_) => {
                         println!("error: fork failed");

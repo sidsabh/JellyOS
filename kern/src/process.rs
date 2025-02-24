@@ -136,3 +136,51 @@ impl Clone for ConsoleFile {
         ConsoleFile
     }
 }
+
+
+#[derive(Clone)]
+pub struct ChildFuture {
+    pub done: Option<Arc<Mutex<bool>>>, // Shared flag between parent & child
+}
+
+impl ChildFuture {
+    /// Create a new ChildFuture (Initially not done)
+    pub fn new() -> Self {
+        Self {
+            done: Some(Arc::new(Mutex::new(false))),
+        }
+    }
+
+    /// Mark the child process as done
+    pub fn complete(&self) {
+        if let Some(done) = &self.done {
+            let mut done = done.lock();
+            *done = true;
+        }
+    }
+
+    pub fn is_done(&self) -> bool {
+        if let Some(done) = &self.done {
+            let done = done.lock();
+            *done
+        } else {
+            true
+        }
+    }
+
+    /// Blocks until the child is done
+    pub fn wait(&self) {
+        if let Some(done) = &self.done {
+            let done = done.lock();
+            while !*done {
+                core::hint::spin_loop(); // Efficient waiting (reduces CPU usage)
+            }
+        }
+    }
+}
+
+impl core::fmt::Debug for ChildFuture {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        write!(f, "ChildFuture {{ done: {:?} }}", *self.done.as_ref().unwrap().lock())
+    }
+}

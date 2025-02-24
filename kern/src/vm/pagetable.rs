@@ -126,8 +126,6 @@ impl PageTable {
             pt.l2.entries[i].set_value(entry.as_ptr().as_u64() >> PAGE_ALIGN, RawL2Entry::ADDR);
         }
         
-        // kprintln!("{:#?}", pt);
-
         pt
     }
 
@@ -425,7 +423,7 @@ impl Clone for UserPageTable {
                     let old_phys_addr = entry.0.get_masked(RawL3Entry::ADDR);
                     let virt_addr = VirtualAddr::from(USER_IMG_BASE+ (l2_idx << 29) | (l3_idx << 16));
 
-                    // kprintln!("Cloning page at {:x} to {:x}", old_phys_addr, virt_addr.as_usize());
+                    trace!("Cloning page at {:x} to {:x}", old_phys_addr, virt_addr.as_usize());
 
                     // Allocate a new page
                     let new_page_slice = new_page_table.alloc(virt_addr, PagePerm::RWX);

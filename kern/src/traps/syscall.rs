@@ -5,11 +5,12 @@ use core::time::Duration;
 
 use smoltcp::wire::{IpAddress, IpEndpoint};
 
-use crate::console::{kprint, kprintln, CONSOLE};
+use crate::console::kprint;
 use crate::param::USER_IMG_BASE;
 use crate::process::State;
 use crate::traps::TrapFrame;
 use crate::{ETHERNET, SCHEDULER};
+
 
 use kernel_api::*;
 use pi::timer;
@@ -24,7 +25,7 @@ use pi::timer;
 pub fn sys_sleep(ms: u32, tf: &mut TrapFrame) {
     let start = timer::current_time();
     let desired_time = timer::current_time()+Duration::from_millis(ms as u64);
-    kprint!("Sleeping for {} ms, start: {:?}, desired: {:?}\n", ms, start, desired_time);
+    debug!("Sleeping for {} ms, start: {:?}, desired: {:?}\n", ms, start, desired_time);
     let boxed_fnmut = Box::new(move |_: &mut crate::process::Process| {
         timer::current_time() >= desired_time
     });
@@ -52,14 +53,17 @@ pub fn sys_time(tf: &mut TrapFrame) {
 ///
 /// This system call does not take paramer and does not return any value.
 pub fn sys_exit(tf: &mut TrapFrame) {
+    // get parent
+    SCHEDULER.with_current_process_mut(tf, |process| {
+        let parent = process.parent.clone();
+        parent.complete();
+    });
     let id = SCHEDULER.kill(tf).expect("failed to kill proc {}");
-    //kprintln!("killed proc {}", id);
     assert!(id == tf.tpidr);
-    //kprintln!("{:#?}", SCHEDULER);
     while SCHEDULER.switch_to(tf) == u64::MAX {
         aarch64::wfi();
     }
-    //kprintln!("tf: {:x}", tf.sp, tf.pc, tf.tpidr);
+    // TODO: can also block here
 }
 
 /// Writes to console.
@@ -275,12 +279,14 @@ pub fn handle_syscall(num: u16, tf: &mut TrapFrame) {
         NR_READDIR => sys_readdir(tf.regs[0] as usize, tf.regs[1] as usize, tf.regs[2] as usize, tf),
         NR_EXEC => sys_exec(tf.regs[0] as usize, tf),
         NR_FORK => sys_fork(tf),
+        NR_WAITPID => sys_wait(tf, tf.regs[0] as usize),
         _ => panic!("unimplemented syscall: {}", num),
     }
 }
 
 use alloc::sync::Arc;
 use crate::mutex::Mutex;
+use crate::process::ChildFuture;
 pub fn sys_open(va: usize, tf: &mut TrapFrame) {
 
     let path = match unsafe { to_user_slice(va, 256) } {
@@ -479,7 +485,7 @@ pub fn sys_readdir(fd: usize, user_buf: usize, buf_len: usize, tf: &mut TrapFram
 use crate::process::Process;
 use shim::path::Path;
 pub fn sys_exec(va: usize, tf: &mut TrapFrame) {
-    kprintln!("[sys_exec] Received request to exec at VA: {:#x}", va);
+    trace!("[sys_exec] Received request to exec at VA: {:#x}", va);
 
     // Read the path string
     let path = match unsafe { to_user_slice(va, 256) } {
@@ -528,8 +534,8 @@ pub fn sys_exec(va: usize, tf: &mut TrapFrame) {
         }
     }
 
-    kprintln!("[sys_exec] Executing: '{}'", clean_path);
-    kprintln!("[sys_exec] Args: {:?}", args);
+    trace!("[sys_exec] Executing: '{}'", clean_path);
+    trace!("[sys_exec] Args: {:?}", args);
 
     // Run execve() and update process.context, etc.
     let new_tf = SCHEDULER.with_current_process_mut(tf, |process| {
@@ -539,40 +545,70 @@ pub fn sys_exec(va: usize, tf: &mut TrapFrame) {
         }
     });
 
+
     use crate::GlobalScheduler;
-    kprintln!("[sys_exec] tf: {:#x?}", new_tf);
+    trace!("[sys_exec] tf: {:#x?}", new_tf);
     match new_tf {
         Some(context) => {
-            kprintln!("[sys_exec] Switching to user mode at {:#x}", context.pc);
+            trace!("[sys_exec] Switching to user mode at {:#x}", context.pc);
             GlobalScheduler::switch_to_user(&context);
         }
         None => {
-            kprintln!("[sys_exec] ERROR: execve() failed!");
+            trace!("[sys_exec] ERROR: execve() failed!");
             tf.regs[7] = OsError::InvalidFile as u64;
         }
     }
-    kprintln!("[sys_exec] ERROR: execve() should not return!");
+    trace!("[sys_exec] ERROR: execve() should not return!");
     tf.regs[7] = OsError::InvalidFile as u64;
 }
 
 
 
-
-
 pub fn sys_fork(tf: &mut TrapFrame) {
-    kprintln!("[sys_fork] Forking process...");
+    trace!("[sys_fork] Forking process...");
 
-    let mut new_proc = SCHEDULER.with_current_process_mut(tf, |parent| {
-        parent.clone()
+    let child_fut = ChildFuture::new();
+
+    let (mut new_proc, child_descriptor) = SCHEDULER.with_current_process_mut(tf, |parent| {
+        parent.children.push(child_fut.clone());
+        (parent.clone(), parent.children.len())
     });
     new_proc.state = State::Ready;
     *new_proc.context = *tf; // Updated frame
     // print tf:
-    kprintln!("[sys_fork] tf: {:#x?}", tf);
     new_proc.context.regs[0] = 0; // Child returns 0
     new_proc.context.ttbr1_el1 = new_proc.vmap.get_baddr().as_u64();
+    new_proc.parent = child_fut.clone();
     
-    let pid = SCHEDULER.add(new_proc).unwrap(); // Add the new process to the scheduler
+
+    SCHEDULER.add(new_proc).unwrap(); // Add the new process to the scheduler
     // Parent returns child PID
-    tf.regs[0] = pid as u64;
+    tf.regs[0] = child_descriptor as u64;
+}
+
+
+pub fn sys_wait(tf: &mut TrapFrame, pid: usize) {
+    let pid = pid - 1;
+    let result = SCHEDULER.with_current_process_mut(tf, |process| {
+        let child_done = {
+            let child = &process.children[pid];
+            child.is_done()
+        };
+
+        if child_done {
+            process.children.remove(pid);
+            State::Ready
+        } else {
+            let c = process.children[pid].clone();
+            let boxed_fnmut = Box::new(move |_: &mut crate::process::Process| {
+                c.is_done()
+            });
+            State::Waiting(Some(boxed_fnmut))
+        }
+    });
+
+    SCHEDULER.block(result, tf);
+
+    tf.regs[7] = OsError::Ok as u64;
+    
 }

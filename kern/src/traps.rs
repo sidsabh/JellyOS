@@ -3,7 +3,6 @@ mod syndrome;
 mod syscall;
 
 pub mod irq;
-use crate::console::{kprint, kprintln};
 use crate::process::GlobalScheduler;
 
 pub use self::frame::TrapFrame;
@@ -49,17 +48,17 @@ use crate::{shell, IRQ};
 /// the trap frame for the exception.
 #[no_mangle]
 pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
-    // kprintln!("info: {:#?}", info);
+    // trace!("info: {:#?}", info);
     match info.kind {
         Kind::Synchronous if let Syndrome::Svc(num) = Syndrome::from(esr) => {
-            // kprintln!("tf: {:#?}", tf);
+            trace!("tf: {:#?}", tf);
             handle_syscall(num, tf);
         }
         Kind::Synchronous => {
             match Syndrome::from(esr) {
                 Syndrome::DataAbort { kind, level } => {
                     unsafe {
-                        kprintln!("Fault addr: {:x}", FAR_EL1.get());
+                        debug!("Fault addr: {:x}", FAR_EL1.get());
                     }
                 },
                 _ => {}
@@ -68,7 +67,7 @@ pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
             // is the address of instr that generated exception
             // panic!("{:#?}, {}, {:#?}", info, esr, Syndrome::from(esr));
             info!("Unhandled exception: {:#?}, {:#?}", info, Syndrome::from(esr));
-            kprintln!("TrapFrame: {:#x?}", tf);
+            info!("TrapFrame: {:#x?}", tf);
             let _ = SCHEDULER.kill(tf);
             GlobalScheduler::switch_to_idle(); // TODO: kill the old proc, set a return code, etc.
         }
@@ -79,7 +78,7 @@ pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
             if affinity() == 0 {
                 for i in Interrupt::iter() {
                     if global_controller.is_pending(i) {
-                        // kprintln!("{:#?}, idx:{:#?} ", info, i);
+                        // info!("{:#?}, idx:{:#?} ", info, i);
                         GLOBAL_IRQ.invoke(i, tf);
                         handled = true;
                         break;
@@ -91,7 +90,7 @@ pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
                 let local_controller = LocalController::new(affinity());
                 for i in LocalInterrupt::iter() {
                     if local_controller.is_pending(i) {
-                        // kprintln!("{:#?}, idx:{:#?} ", info, i);
+                        // debug!("{:#?}, idx:{:#?} ", info, i);
                         IRQ.invoke(i, tf);
                         handled = true;
                         break;
@@ -104,10 +103,10 @@ pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
             }
         }
         Kind::Fiq => {
-            kprintln!("FIQ trap");
+            debug!("FIQ trap");
         }
         Kind::SError => {
-            kprintln!("SError trap");
+            debug!("SError trap");
         }
     }
 }

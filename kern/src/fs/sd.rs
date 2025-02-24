@@ -31,7 +31,6 @@ extern "C" {
 
 use pi::timer;
 
-use crate::console::kprintln;
 #[no_mangle]
 fn wait_micros(us : u32) {
     timer::spin_sleep(Duration::from_micros(us as u64));
@@ -53,15 +52,15 @@ impl Sd {
                 return Ok(Sd);
             },
             -1 => {
-                kprintln!("sdcard err: {}", sd_err);
+                debug!("sdcard err: {}", sd_err);
                 Err(io::Error::new(io::ErrorKind::TimedOut, "SD Card initialization timed out"))
             },
             -2 => {
-                kprintln!("sdcard err: {}", sd_err);
+                debug!("sdcard err: {}", sd_err);
                 Err(io::Error::new(io::ErrorKind::ConnectionRefused, "SD Card did not recieve commands"))
             },
             _ => {
-                kprintln!("sdcard err: {}", sd_err);
+                trace!("sdcard err: {}", sd_err);
                 Err(io::Error::new(io::ErrorKind::Uncategorized, "Unknown error"))
             }
         }

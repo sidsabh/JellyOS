@@ -14,8 +14,6 @@ use aarch64::*;
 use pi::local_interrupt::LocalInterrupt;
 use smoltcp::time::Instant;
 
-use crate::console::kprint;
-use crate::console::kprintln;
 use crate::mutex::Mutex;
 use crate::net::uspi::TKernelTimerHandle;
 use crate::param;
@@ -48,6 +46,8 @@ fn is_idle(id : Id) -> bool {
     id >= u64::MAX - (param::NCORES as u64) - 1
 }
 
+use crate::process::ChildFuture;
+
 impl GlobalScheduler {
     /// Returns an uninitialized wrapper around a local scheduler.
     pub const fn uninitialized() -> GlobalScheduler {
@@ -57,7 +57,7 @@ impl GlobalScheduler {
     fn init_idle_procs() {
         for i in 0..NCORES {
             let mut idle_proc = IDLE_PROCS[i].lock();
-            *idle_proc = Some(Box::new(Process::new().expect("Failed to create idle process")));
+            *idle_proc = Some(Box::new(Process::new(ChildFuture{done: None}).expect("Failed to create idle process")));
             
             let mut tf = *idle_proc.as_mut().unwrap().context;
             tf.sp = Process::get_stack_top().as_u64();
@@ -144,11 +144,12 @@ impl GlobalScheduler {
         self.critical(|scheduler| {
             scheduler.schedule_out(new_state, &mut old_tf);
         });
-        
+
         if id != u64::MAX {
             return id;
         }
 
+        info!("No process to switch to, switching to idle");
         // get idle process for this core
         Self::switch_to_idle();
         
@@ -194,8 +195,7 @@ impl GlobalScheduler {
         unsafe {
             asm!(
                 "mov x0, {context:x}",
-                "bl idle_context_restore",
-                "eret",
+                "bl super_restore",
                 context = in(reg) frame_addr,
             );
         }
@@ -226,7 +226,16 @@ impl GlobalScheduler {
         let mut vmap = Box::new(upt);
         tf.ttbr1_el1 = vmap.get_baddr().as_u64();
         GlobalScheduler::load_code(&mut vmap, idle_proc_code as *const u8);
-        GlobalScheduler::switch_to_user(&tf)
+        
+        unsafe {
+            asm!(
+                "mov x0, {context:x}",
+                "bl idle_context_restore",
+                "eret",
+                context = in(reg) &*tf,
+            );
+        }
+        loop {}
         
     }
 
@@ -253,22 +262,7 @@ impl GlobalScheduler {
             Box::new(|tf: &mut TrapFrame| {
                 // tf was the interrupted processes' trap frame
                 pi::local_interrupt::local_tick_in(aarch64::affinity(), crate::param::TICK);
-                // kprintln!("interrupt at core {} with tpidr {}", aarch64::affinity(), tf.tpidr);
-
-
                 self.switch(State::Ready, tf); // context switch
-
-                // kprintln!("interrupt");
-                // let binding = self.0.lock();
-                // let t = binding.as_ref().unwrap();
-                // for p in &t.processes {
-                //     kprintln!("{:#?}", p.state);
-                // }
-                // kprintln!("");
-
-                // if let Some(id) = self.kill(tf) {
-                //     kprintln!("{}", id);
-                // }
             }),
         );
 
@@ -285,7 +279,7 @@ impl GlobalScheduler {
         Self::init_idle_procs();
 
         use shim::path::Path;
-        let p = Process::load(Path::new("/programs/shell.bin")).expect("failed to load test proc");
+        let p = Process::load(Path::new("/programs/shell.bin"), ChildFuture{done: None}).expect("failed to load test proc");
         self.add(p);
 
         // for _ in 0..NCORES*2 {

@@ -423,3 +423,23 @@ pub fn exec(path: &str, argv: &[&str]) -> OsResult<()> {
 
     err_or!(ecode, ())
 }
+
+
+pub fn wait(pid: usize) -> OsResult<()> {
+    let mut ecode: u64;
+
+    unsafe {
+        asm!(
+            "mov x0, {pid}",
+            "svc {nr_wait}",
+            "mov {ecode}, x7",
+            pid = in(reg) pid,
+            nr_wait = const NR_WAITPID,
+            ecode = out(reg) ecode,
+            out("x7") _, // Clobbers x7
+            options(nostack),
+        );
+    }
+
+    err_or!(ecode, ())
+}

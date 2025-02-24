@@ -89,7 +89,7 @@ pub const NR_LEN: usize = 11;
 pub const NR_READDIR: usize = 12;
 pub const NR_EXEC: usize = 13;
 pub const NR_FORK: usize = 14;
-
+pub const NR_WAITPID: usize = 15;
 
 
 #[derive(Clone, Copy, Debug)]
