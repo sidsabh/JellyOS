@@ -13,6 +13,8 @@ use crate::{param::*, FILESYSTEM};
 use crate::process::*;
 use crate::traps::TrapFrame;
 use crate::vm::*;
+use aarch64::PState;
+
 // use kernel_api::{OsError, OsResult};
 
 /// Type alias for the type of a process ID.
@@ -33,8 +35,8 @@ pub struct Process {
     //// Socket handles held by the current process
     // pub sockets: Vec<SocketHandle>,
     pub files: Vec<Option<ProcessFile>>, // Open file table
-    pub children: Vec<ChildFuture>, // Child processes
-    pub parent: ChildFuture
+    pub children: Vec<Arc<Mutex<ChildStatus>>>, // Child processes
+    pub parent: Option<Arc<Mutex<ChildStatus>>>, // Parent process
 }
 use kernel_api::{OsResult, OsError};
 use heap::align_down;
@@ -44,7 +46,7 @@ impl Process {
     ///
     /// If enough memory could not be allocated to start the process, returns
     /// `None`. Otherwise returns `Some` of the new `Process`.
-    pub fn new(parent: ChildFuture) -> OsResult<Process> {
+    pub fn new(parent: Option<Arc<Mutex<ChildStatus>>>) -> OsResult<Process> {
         let context = Box::new(TrapFrame::default());
         let stack = Stack::new().ok_or(OsError::NoMemory)?;
         let state = State::Ready;
@@ -126,6 +128,7 @@ impl Process {
         use aarch64::PState;
         let mut pstate = PState::new(0);
         pstate.set_value(0b1_u64, PState::F);
+        // pstate.set_value(0b1_u64, PState::I);
         pstate.set_value(0b1_u64, PState::A);
         pstate.set_value(0b1_u64, PState::D);
         pstate.set_value(0b000_u64, PState::M); // EL0
@@ -229,10 +232,11 @@ impl Process {
     /// `spsr` - `F`, `A`, `D` bit should be set.
     ///
     /// Returns Os Error if do_load fails.
-    pub fn load<P: AsRef<Path>>(pn: P, parent: ChildFuture) -> OsResult<Process> {
+    pub fn load<P: AsRef<Path>>(pn: P, parent: Option<Arc<Mutex<ChildStatus>>>) -> OsResult<Process> {
         use crate::VMM;
 
         let mut p = Process::do_load(pn, parent)?;
+        
 
         p.context.sp = Process::get_stack_top().as_u64();
         p.context.pc = Process::get_image_base().as_u64();
@@ -241,6 +245,7 @@ impl Process {
         use aarch64::PState;
         let mut pstate = PState::new(0);
         pstate.set_value(0b1_u64, PState::F);
+        // pstate.set_value(0b1_u64, PState::I);
         pstate.set_value(0b1_u64, PState::A);
         pstate.set_value(0b1_u64, PState::D);
         pstate.set_value(0b000_u64, PState::M); // EL0
@@ -252,7 +257,7 @@ impl Process {
     /// Creates a process and open a file with given path.
     /// Allocates one page for stack with read/write permission, and N pages with read/write/execute
     /// permission to load file's contents.
-    fn do_load<P: AsRef<Path>>(pn: P, parent: ChildFuture) -> OsResult<Process> {
+    fn do_load<P: AsRef<Path>>(pn: P, parent: Option<Arc<Mutex<ChildStatus>>>) -> OsResult<Process> {
         use fat32::traits::FileSystem;
         use shim::io::Read;
         let mut file = FILESYSTEM.open_file(pn)?;
@@ -348,10 +353,10 @@ impl Clone for Process {
             context: self.context.clone(),
             stack: self.stack.clone(),
             vmap: self.vmap.clone(),
-            state: self.state.clone(),
+            state: State::Ready,
             files : self.files.clone(),
             children: Vec::new(),
-            parent: self.parent.clone()
+            parent: None
         }
     }
 }

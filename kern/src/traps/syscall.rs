@@ -1,6 +1,7 @@
 use aarch64::{affinity, current_el};
 use alloc::boxed::{self, Box};
 use fat32::traits::FileSystem;
+use core::hint::spin_loop;
 use core::time::Duration;
 
 use smoltcp::wire::{IpAddress, IpEndpoint};
@@ -34,7 +35,7 @@ pub fn sys_sleep(ms: u32, tf: &mut TrapFrame) {
             let tf = &mut process.context;
             tf.regs[0] = (timer::current_time() - start).as_millis() as u64;
             tf.regs[7] = 1;
-            trace!("Process {}: Woke up, current time: {:?}", tf.tpidr, timer::current_time());
+            debug!("Process {}: Woke up, current time: {:?}", tf.tpidr, timer::current_time());
         }
 
         res
@@ -65,7 +66,14 @@ pub fn sys_exit(tf: &mut TrapFrame) {
     let parent_semaphore = SCHEDULER.with_current_process_mut(tf, |process| {
          process.parent.clone()
     });
-    parent_semaphore.complete();
+    if let Some(parent_semaphore) = parent_semaphore {
+        // set parent semaphore
+        let mut g = parent_semaphore.lock();
+        g.done = true;
+        g.exit_code = Some(0);
+    }
+
+
     // remove from scheduler
     let id = SCHEDULER.kill(tf).expect("failed to kill process");
     assert!(id == tf.tpidr);
@@ -292,7 +300,7 @@ pub fn handle_syscall(num: u16, tf: &mut TrapFrame) {
 
 use alloc::sync::Arc;
 use crate::mutex::Mutex;
-use crate::process::ChildFuture;
+use crate::process::ChildStatus;
 pub fn sys_open(va: usize, tf: &mut TrapFrame) {
 
     let path = match unsafe { to_user_slice(va, 256) } {
@@ -557,7 +565,7 @@ pub fn sys_exec(va: usize, tf: &mut TrapFrame) {
     match new_tf {
         Some(context) => {
             trace!("[sys_exec] Switching to user mode at {:#x}", context.pc);
-            GlobalScheduler::switch_to_user(&context);
+            GlobalScheduler::switch_to_user(&SCHEDULER,&context);
         }
         None => {
             trace!("[sys_exec] ERROR: execve() failed!");
@@ -573,49 +581,54 @@ pub fn sys_exec(va: usize, tf: &mut TrapFrame) {
 pub fn sys_fork(tf: &mut TrapFrame) {
     trace!("[sys_fork] Forking process...");
 
-    let child_fut = ChildFuture::new();
-
-    let (mut new_proc, child_descriptor) = SCHEDULER.with_current_process_mut(tf, |parent| {
+    let child_fut = Arc::new(Mutex::new(ChildStatus::new()));
+    let mut new_proc = SCHEDULER.with_current_process_mut(tf, |parent| {
+        // Create a new process
         parent.children.push(child_fut.clone());
-        (parent.clone(), parent.children.len())
+        parent.clone()
     });
+    
+
     new_proc.state = State::Ready;
     *new_proc.context = *tf; // Updated frame
     // print tf:
     new_proc.context.regs[0] = 0; // Child returns 0
-    new_proc.context.tpidr = child_descriptor as u64;
     new_proc.context.ttbr1_el1 = new_proc.vmap.get_baddr().as_u64();
-    new_proc.parent = child_fut.clone();
-    
+    new_proc.parent = Some(child_fut.clone());
 
-    SCHEDULER.add(new_proc).unwrap(); // Add the new process to the scheduler
-    // Parent returns child PID
-    tf.regs[0] = child_descriptor as u64;
+        
+    let id = SCHEDULER.add(new_proc).unwrap(); // Add the new process to the scheduler
+
+
+    // Set the child process's PID
+    {
+        let mut g = child_fut.lock();
+        g.pid = Some(id);
+    }
+    
+    // // Parent returns child PID
+    tf.regs[0] = id as u64;
 }
 
 
 pub fn sys_wait(tf: &mut TrapFrame, pid: usize) {
-    let pid = pid - 1;
-    let result = SCHEDULER.with_current_process_mut(tf, |process| {
-        let child_done = {
-            let child = &process.children[pid];
-            child.is_done()
-        };
 
-        if child_done {
-            process.children.remove(pid);
-            State::Ready
-        } else {
-            let c = process.children[pid].clone();
-            let boxed_fnmut = Box::new(move |_: &mut crate::process::Process| {
-                c.is_done()
-            });
-            State::Waiting(Some(boxed_fnmut))
+    let boxed_fnmut = Box::new(move |process: &mut crate::process::Process| {
+        let child = process.children.get(pid - 1);
+        if child.is_none() {
+            process.context.regs[7] = OsError::InvalidFile as u64;
+            return false;
         }
+        let child = child.unwrap().lock();
+        let child_done = child.done;
+        if child_done {
+            process.context.regs[0] = child.pid.unwrap() as u64;
+            // process.context.regs[1] = child.exit_code.unwrap() as u64;
+            process.context.regs[7] = OsError::Ok as u64;
+        }
+
+        child_done
     });
 
-    SCHEDULER.block(result, tf);
-
-    tf.regs[7] = OsError::Ok as u64;
-    
+    SCHEDULER.block(State::Waiting(Some(boxed_fnmut)), tf);
 }

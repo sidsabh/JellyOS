@@ -1,53 +1,23 @@
 use alloc::boxed::Box;
 use alloc::collections::vec_deque::VecDeque;
-use alloc::vec::Vec;
-use pi::interrupt;
-
-use core::borrow::Borrow;
 use core::ffi::c_void;
 use core::fmt;
-use core::mem;
-use core::time::Duration;
 use core::u64;
-
+use core::arch::asm;
 use aarch64::*;
 use pi::local_interrupt::LocalInterrupt;
-use smoltcp::time::Instant;
 
 use crate::mutex::Mutex;
 use crate::net::uspi::TKernelTimerHandle;
-use crate::param;
-use crate::param::*;
-use crate::percore;
-use crate::percore::{get_preemptive_counter, is_mmu_ready, local_irq};
 use crate::process::{Id, Process, State};
 use crate::traps::irq::IrqHandlerRegistry;
 use crate::traps::TrapFrame;
-use crate::vm::UserPageTable;
 use crate::GLOBAL_IRQ;
 use crate::{ETHERNET, USB};
-use core::arch::asm;
 
 /// Process scheduler for the entire machine.
 #[derive(Debug)]
 pub struct GlobalScheduler(Mutex<Option<Box<Scheduler>>>);
-
-
-use core::sync::atomic::{AtomicBool, Ordering};
-
-pub static IDLE_PROCS: [Mutex<Option<Box<Process>>>; param::NCORES] = [
-    Mutex::new(None),
-    Mutex::new(None),
-    Mutex::new(None),
-    Mutex::new(None),
-];
-
-
-fn is_idle(id : Id) -> bool {
-    id >= u64::MAX - (param::NCORES as u64)
-}
-
-use crate::process::ChildFuture;
 
 impl GlobalScheduler {
     /// Returns an uninitialized wrapper around a local scheduler.
@@ -56,13 +26,22 @@ impl GlobalScheduler {
     }
 
     pub fn idle_thread() -> ! {
-        unsafe {
-            asm!("msr daifclr, #0xf", options(nomem, nostack));
+        loop {
+            unsafe {
+                asm!(
+                    "mov x0, {max:x}",
+                    "msr tpidr_el0, x0",
+                    max = in(reg) u64::MAX,
+                );
+                SP.set(crate::param::KERN_STACK_BASE - crate::param::KERN_STACK_SIZE * MPIDR_EL1.get_value(MPIDR_EL1::Aff0) as usize);
+            }
+            trace!("Idle thread running on core {}", aarch64::affinity());
+            unsafe {
+                sti();
+            } // enable IRQs for the nap
+            wfi(); // sleep until *next* interrupt
         }
-        loop {}
     }
-
-
 
     /// Enters a critical region and execute the provided closure with a mutable
     /// reference to the inner scheduler.
@@ -85,7 +64,9 @@ impl GlobalScheduler {
         F: FnOnce(&mut Process) -> R,
     {
         self.critical(|scheduler| {
-            let process = scheduler.find_process(tf).expect("No running process found");
+            let process = scheduler
+                .find_process(tf)
+                .expect("No running process found");
             f(process)
         })
     }
@@ -94,17 +75,39 @@ impl GlobalScheduler {
     /// restoring the next process's trap frame into `tf`. For more details, see
     /// the documentation on `Scheduler::schedule_out()` and `Scheduler::switch_to()`.
     pub fn switch(&self, new_state: State, tf: &mut TrapFrame) -> Id {
-        let mut old_tf = tf.clone();
-        let id = self.switch_to(tf);
-        if id != u64::MAX {
-            self.critical(|scheduler| {
-                scheduler.schedule_out(new_state, &mut old_tf);
-            });
+        trace!("Switch called");
+
+        let og_id = tf.tpidr;
+        if !tf.is_idle() {
+            let mut old_tf = tf.clone();
+            let id = self.switch_to(tf);
+            if id != u64::MAX {
+                self.critical(|scheduler| {
+                    scheduler.schedule_out(new_state, &mut old_tf);
+                });
+            }
+            trace!(
+                "[CORE {}] Switching from process {} to process {}",
+                affinity(),
+                og_id,
+                id
+            );
+            id
+        } else {
+            let id = self.switch_to(tf);
+            trace!(
+                "[IDLE] [CORE {}] Switching from process {} to process {}",
+                affinity(),
+                og_id,
+                id
+            );
+            id
         }
-        id
     }
 
-    pub fn block(&self, new_state: State, tf: &mut TrapFrame) -> Id {
+    pub fn block(&self, new_state: State, tf: &mut TrapFrame) -> ! {
+        assert!(!tf.is_idle());
+
         let mut old_tf = tf.clone();
         let id = self.switch_to(tf);
 
@@ -112,13 +115,16 @@ impl GlobalScheduler {
             scheduler.schedule_out(new_state, &mut old_tf);
         });
 
-        if id != u64::MAX {
-            return id;
-        }
+        trace!("Switching from process {} to process {}", tf.tpidr, id);
+        // print tf:
+        trace!("{:?}", tf);
 
-        info!("No process to switch to, switching to idle");
-        // get idle process for this core
-        Self::idle_thread();
+        if id != u64::MAX {
+            Self::switch_to_user(&self, tf);
+        } else {
+            info!("No process to switch to, switching to idle");
+            Self::idle_thread();
+        }
     }
 
     /// Edited to fix deadlock
@@ -129,23 +135,16 @@ impl GlobalScheduler {
         let rtn = self.critical(|scheduler| scheduler.switch_to(tf));
         if let Some(id) = rtn {
             trace!(
-                "[core-{}] switch_to {:?}, pc: {:x}, lr: {:x}, x29: {:x}, x28: {:x}, x27: {:x}",
+                "[core-{}] switch_to {:?}, pc: {:x}, lr: {:x}",
                 affinity(),
                 id,
                 tf.pc,
-                tf.regs[30],
-                tf.regs[29],
-                tf.regs[28],
                 tf.regs[27]
             );
             return id;
         } else {
             return u64::MAX;
         }
-            // problem: when a process ends or hasn't started (idle cores), they hold the IRQ lock
-            // causes live threads to not make progress since they get deadlocked on invoking the
-            // IRQ function
-            //aarch64::wfi();
     }
 
     /// Kills currently running process and returns that process's ID.
@@ -154,16 +153,22 @@ impl GlobalScheduler {
     pub fn kill(&self, tf: &mut TrapFrame) -> Option<Id> {
         self.critical(|scheduler| scheduler.kill(tf))
     }
-    pub fn switch_to_user(tf: &TrapFrame) -> ! {
+    pub fn switch_to_user(&self, tf: &TrapFrame) -> ! {
         let frame_addr = tf as *const TrapFrame as *const u64 as u64;
+        // get the future process's stack
+        let kernel_stack_addr = self.critical(|scheduler| {
+            let process = scheduler.find_process(tf).expect("No running process found");
+            process.stack.top()
+        });
         unsafe {
+            // SP.set(kernel_stack_addr.as_usize());
             asm!(
                 "mov x0, {context:x}",
                 "bl super_restore",
                 context = in(reg) frame_addr,
             );
         }
-        loop {}
+        panic!("switch to user should not return");
     }
 
     /// Starts executing processes in user space using timer interrupt based
@@ -175,9 +180,7 @@ impl GlobalScheduler {
         }
         self.initialize_local_timer_interrupt();
 
-
         Self::idle_thread();
-        
     }
 
     /// # Lab 4
@@ -188,8 +191,7 @@ impl GlobalScheduler {
     /// # Lab 5
     /// Registers a timer handler with `Usb::start_kernel_timer` which will
     /// invoke `poll_ethernet` after 1 second.
-    pub fn initialize_global_timer_interrupt(&'static self) {
-    }
+    pub fn initialize_global_timer_interrupt(&'static self) {}
 
     /// Initializes the per-core local timer interrupt with `pi::local_interrupt`.
     /// The timer should be configured in a way that `CntpnsIrq` interrupt fires
@@ -201,9 +203,41 @@ impl GlobalScheduler {
         IRQ.register(
             LocalInterrupt::CntPnsIrq,
             Box::new(|tf: &mut TrapFrame| {
+                trace!("Timer interrupt on core {}", aarch64::affinity());
+
+                // debug!("Is idle? {}", tf.is_idle());
                 // tf was the interrupted processes' trap frame
                 pi::local_interrupt::local_tick_in(aarch64::affinity(), crate::param::TICK);
                 self.switch(State::Ready, tf); // context switch
+
+                // // print current EL
+                // let mut current_el: u64;
+                // unsafe {
+                //     asm!(
+                //         "mrs {current_el}, CurrentEL",
+                //         current_el = out(reg) current_el,
+                //         options(nomem, nostack, preserves_flags)
+                //     );
+                // }
+                // current_el >>= 2; // shift right to get the current EL
+                // debug!("Current EL: {:x}", current_el);
+
+                // assert!(current_el == 1, "Current EL is not EL1");
+
+                // // print SPSEL
+                // let mut spsel: u64;
+                // unsafe {
+                //     asm!(
+                //         "mrs {spsel}, SPSel",
+                //         spsel = out(reg) spsel,
+                //         options(nomem, nostack, preserves_flags)
+                //     );
+                // }
+                // debug!("SPSel: {:x}", spsel);
+
+                // print SP_EL1
+                // let sp_el1 = SP.get();
+                // debug!("SP_EL1 = {:#x}", sp_el1);
             }),
         );
 
@@ -219,11 +253,10 @@ impl GlobalScheduler {
         *self.0.lock() = Some(Box::new(Scheduler::new()));
 
         use shim::path::Path;
-        let p = Process::load(Path::new("/programs/shell.bin"), ChildFuture{done: None}).expect("failed to load test proc");
+        let p = Process::load(Path::new("/programs/shell.bin"), None)
+            .expect("failed to load test proc");
         self.add(p);
-
     }
-
 }
 
 /// Poll the ethernet driver and re-register a timer handler using
@@ -236,7 +269,7 @@ extern "C" fn poll_ethernet(_: TKernelTimerHandle, _: *mut c_void, _: *mut c_voi
 /// Internal scheduler struct which is not thread-safe.
 pub struct Scheduler {
     processes: VecDeque<Process>, // queue
-    last_id: Option<Id>,
+    last_id: Id,
 }
 
 impl Scheduler {
@@ -244,7 +277,7 @@ impl Scheduler {
     fn new() -> Scheduler {
         Scheduler {
             processes: VecDeque::new(),
-            last_id: None,
+            last_id: 0,
         }
     }
 
@@ -255,12 +288,15 @@ impl Scheduler {
     ///
     /// It is the caller's responsibility to ensure that the first time `switch`
     /// is called, that process is executing on the CPU.
-    fn add(&mut self, process: Process) -> Option<Id> {
-        let new_id = process.context.tpidr;
+    fn add(&mut self, mut process: Process) -> Option<Id> {
+        let new_id = self.last_id;
+        self.last_id += 1;
         // let new_id = self.processes.len() as u64;
         //kprint!("{}", self.processes.len());
 
-        // process.context.tpidr = new_id;
+        debug!("Adding process with ID {}", new_id);
+
+        process.context.tpidr = new_id;
         self.processes.push_back(process);
         Some(new_id)
     }
@@ -273,7 +309,6 @@ impl Scheduler {
     /// If the `processes` queue is empty or there is no current process,
     /// returns `false`. Otherwise, returns `true`.
     fn schedule_out(&mut self, new_state: State, tf: &mut TrapFrame) -> bool {
-
         for (i, p) in self.processes.iter_mut().enumerate() {
             if matches!(p.state, State::Running) && p.context.tpidr == tf.tpidr {
                 p.state = new_state;
@@ -303,7 +338,6 @@ impl Scheduler {
                 *tf = *rproc.context; // context switch bro
                 self.processes.push_front(rproc);
 
-                self.last_id = Some(pid);
                 return Some(pid);
             }
         }

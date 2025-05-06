@@ -1,4 +1,4 @@
-mod frame;
+pub mod frame;
 mod syndrome;
 mod syscall;
 

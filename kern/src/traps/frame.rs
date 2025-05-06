@@ -15,6 +15,13 @@ pub struct TrapFrame {
     reserved : u64,
 }
 
+impl TrapFrame {
+    pub fn is_idle(&self) -> bool {
+        self.tpidr == u64::MAX
+    }
+}
+
+
 const_assert_size!(TrapFrame, 816);
 
 impl fmt::Debug for TrapFrame {
@@ -28,3 +35,37 @@ impl fmt::Debug for TrapFrame {
         
     }
 }
+use alloc::boxed::Box;
+
+// pub fn get_current_trap_frame() -> &'static TrapFrame {
+//     let mut tf = Box::new(TrapFrame::default());
+//     let tf_ptr = Box::into_raw(tf);
+
+//     unsafe {
+//         core::arch::asm!(
+//             // --- 1) save original SP on the stack ---
+//             "mov  x1, sp",
+//             "str  x1, [sp, #-16]!",
+
+//             // --- 2) switch SP to our new frame and call vec_context_save ---
+//             "mov  x0, {frame}",      // x0 = &*tf_ptr
+//             "mov  sp, x0",
+//             "bl   vec_context_save",
+
+//             // --- 3) restore original SP from stack into x1 ---
+//             "ldr  x1, [sp], #16",
+
+//             // --- 4) write x1 into TrapFrame.sp (offset 16) ---
+//             "mov  x2, {frame}",      // x2 = &*tf_ptr
+//             "str  x1, [x2, #16]",
+
+//             // --- 5) restore SP so the CPU stack is back to what it was ---
+//             "mov  sp, x1",
+
+//             frame = in(reg) tf_ptr,
+//             out("x0") _, out("x1") _, out("x2") _,
+//         );
+//     }
+
+//     unsafe { &*tf_ptr }
+// }
