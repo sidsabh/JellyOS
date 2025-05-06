@@ -14,3 +14,7 @@ rustflags = [
     "-C", "link-arg=-luspi",
     "-C", "link-arg=-luspienv",
 ]
+
+[profile.release]
+debug  = 2   # embed full DWARF (or at least 1)
+strip  = "none"

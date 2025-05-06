@@ -1,23 +1,16 @@
 #![no_std]
 #![no_main]
+use user::*;
 
-use core::panic::PanicInfo;
-
-#[panic_handler]
-fn panic(_info: &PanicInfo) -> ! {
-    loop {}
-}
-
-use core::arch::asm;
 #[no_mangle]
-pub extern "C" fn _start() -> ! {
-    loop {
-        let ms = 10000;
+fn main(argc: usize, argv_ptr: *const *const u8) {
+    for _ in 0..10 {
+        let ms = 1000;
         let _error: u64;
         let _elapsed_ms: u64;
 
         unsafe {
-            asm!(
+            core::arch::asm!(
                 "mov x0, {ms:x}",
                 "svc 1",
                 "mov {ems}, x0",
@@ -31,4 +24,5 @@ pub extern "C" fn _start() -> ! {
             );
         }
     }
+    info!("sleep done");
 }

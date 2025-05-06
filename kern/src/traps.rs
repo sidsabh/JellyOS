@@ -7,7 +7,7 @@ use crate::process::GlobalScheduler;
 
 pub use self::frame::TrapFrame;
 
-use crate::{GLOBAL_IRQ, SCHEDULER};
+use crate::{FIQ, GLOBAL_IRQ, SCHEDULER};
 use aarch64::{affinity, current_el, FAR_EL1};
 use pi::interrupt::{Controller, Interrupt};
 use pi::local_interrupt::{LocalController, LocalInterrupt};
@@ -65,11 +65,11 @@ pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
             }
             // Preferred Exception Return Address for synchronous
             // is the address of instr that generated exception
-            // panic!("{:#?}, {}, {:#?}", info, esr, Syndrome::from(esr));
-            info!("Unhandled exception: {:#?}, {:#?}", info, Syndrome::from(esr));
-            info!("TrapFrame: {:#x?}", tf);
-            let _ = SCHEDULER.kill(tf);
-            GlobalScheduler::switch_to_idle(); // TODO: kill the old proc, set a return code, etc.
+            panic!("{:#?}, {}, {:#?}", info, esr, Syndrome::from(esr));
+            // info!("Unhandled exception: {:#?}, {:#?}", info, Syndrome::from(esr));
+            // info!("TrapFrame: {:#x?}", tf);
+            // let _ = SCHEDULER.kill(tf);
+            // GlobalScheduler::switch_to_idle(); // TODO: kill the old proc, set a return code, etc.
         }
         Kind::Irq => {
             let mut handled = false;
@@ -103,7 +103,7 @@ pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
             }
         }
         Kind::Fiq => {
-            debug!("FIQ trap");
+            FIQ.invoke((), tf);
         }
         Kind::SError => {
             debug!("SError trap");

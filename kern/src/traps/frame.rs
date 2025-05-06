@@ -4,12 +4,12 @@ use shim::const_assert_size;
 #[repr(C)]
 #[derive(Default, Copy, Clone)]
 pub struct TrapFrame {
-    pub pc : u64,
+    pub pc : u64, // User PC when exception occurs
     pub pstate : u64,
-    pub sp : u64,
+    pub sp : u64, // User SP when exception occurs
     pub tpidr : u64,
-    pub ttbr0_el1 : u64,
-    pub ttbr1_el1 : u64,
+    pub ttbr0_el1 : u64, // Kernel page table base register
+    pub ttbr1_el1 : u64, // User page table base register
     big_regs : [u128; 32],
     pub regs : [u64; 31],
     reserved : u64,

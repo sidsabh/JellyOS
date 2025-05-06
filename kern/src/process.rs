@@ -173,7 +173,7 @@ impl ChildFuture {
         if let Some(done) = &self.done {
             let done = done.lock();
             while !*done {
-                core::hint::spin_loop(); // Efficient waiting (reduces CPU usage)
+                core::hint::spin_loop(); // Efficient waiting (reduces CPU usage), beter to block tho
             }
         }
     }

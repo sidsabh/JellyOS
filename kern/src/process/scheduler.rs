@@ -26,6 +26,7 @@ use crate::traps::TrapFrame;
 use crate::vm::UserPageTable;
 use crate::GLOBAL_IRQ;
 use crate::{ETHERNET, USB};
+use core::arch::asm;
 
 /// Process scheduler for the entire machine.
 #[derive(Debug)]
@@ -43,7 +44,7 @@ pub static IDLE_PROCS: [Mutex<Option<Box<Process>>>; param::NCORES] = [
 
 
 fn is_idle(id : Id) -> bool {
-    id >= u64::MAX - (param::NCORES as u64) - 1
+    id >= u64::MAX - (param::NCORES as u64)
 }
 
 use crate::process::ChildFuture;
@@ -54,45 +55,11 @@ impl GlobalScheduler {
         GlobalScheduler(Mutex::new(None))
     }
 
-    fn init_idle_procs() {
-        for i in 0..NCORES {
-            let mut idle_proc = IDLE_PROCS[i].lock();
-            *idle_proc = Some(Box::new(Process::new(ChildFuture{done: None}).expect("Failed to create idle process")));
-            
-            let mut tf = *idle_proc.as_mut().unwrap().context;
-            tf.sp = Process::get_stack_top().as_u64();
-            tf.pc = Process::get_image_base().as_u64();
-            let mut pstate = PState::new(0);
-            pstate.set_value(0b1_u64, PState::F);
-            pstate.set_value(0b1_u64, PState::A);
-            pstate.set_value(0b1_u64, PState::D);
-            tf.pstate = pstate.get();
-            tf.tpidr = u64::MAX - i as u64;
-            tf.ttbr0_el1 = crate::VMM.get_baddr().as_u64();
-            let upt = crate::vm::UserPageTable::new();
-            let mut vmap = Box::new(upt);
-            tf.ttbr1_el1 = vmap.get_baddr().as_u64();
-            GlobalScheduler::load_code(&mut vmap, idle_proc_code as *const u8);
-        }
-    }
-
-    pub fn switch_to_idle() {
-
-        let frame_addr = {
-            let mut idle_proc = IDLE_PROCS[aarch64::affinity()].lock();
-            let idle_proc = idle_proc.as_mut().unwrap();
-            idle_proc.state = State::Running;
-            idle_proc.context.as_ref() as *const TrapFrame as *const u64 as u64
-        };
-
+    pub fn idle_thread() -> ! {
         unsafe {
-            asm!(
-                "mov x0, {context:x}",
-                "bl idle_context_restore",
-                "eret",
-                context = in(reg) frame_addr,
-            );
+            asm!("msr daifclr, #0xf", options(nomem, nostack));
         }
+        loop {}
     }
 
 
@@ -151,9 +118,7 @@ impl GlobalScheduler {
 
         info!("No process to switch to, switching to idle");
         // get idle process for this core
-        Self::switch_to_idle();
-        
-        id
+        Self::idle_thread();
     }
 
     /// Edited to fix deadlock
@@ -189,7 +154,6 @@ impl GlobalScheduler {
     pub fn kill(&self, tf: &mut TrapFrame) -> Option<Id> {
         self.critical(|scheduler| scheduler.kill(tf))
     }
-
     pub fn switch_to_user(tf: &TrapFrame) -> ! {
         let frame_addr = tf as *const TrapFrame as *const u64 as u64;
         unsafe {
@@ -212,30 +176,7 @@ impl GlobalScheduler {
         self.initialize_local_timer_interrupt();
 
 
-        let mut tf = Box::new(TrapFrame::default());
-        tf.sp = Process::get_stack_top().as_u64();
-        tf.pc = Process::get_image_base().as_u64();
-        let mut pstate = PState::new(0);
-        pstate.set_value(0b1_u64, PState::F);
-        pstate.set_value(0b1_u64, PState::A);
-        pstate.set_value(0b1_u64, PState::D);
-        tf.pstate = pstate.get();
-        tf.tpidr = u64::MAX;
-        tf.ttbr0_el1 = crate::VMM.get_baddr().as_u64();
-        let upt = crate::vm::UserPageTable::new();
-        let mut vmap = Box::new(upt);
-        tf.ttbr1_el1 = vmap.get_baddr().as_u64();
-        GlobalScheduler::load_code(&mut vmap, idle_proc_code as *const u8);
-        
-        unsafe {
-            asm!(
-                "mov x0, {context:x}",
-                "bl idle_context_restore",
-                "eret",
-                context = in(reg) &*tf,
-            );
-        }
-        loop {}
+        Self::idle_thread();
         
     }
 
@@ -276,33 +217,13 @@ impl GlobalScheduler {
     /// Initializes the scheduler and add userspace processes to the Scheduler.
     pub unsafe fn initialize(&self) {
         *self.0.lock() = Some(Box::new(Scheduler::new()));
-        Self::init_idle_procs();
 
         use shim::path::Path;
         let p = Process::load(Path::new("/programs/shell.bin"), ChildFuture{done: None}).expect("failed to load test proc");
         self.add(p);
 
-        // for _ in 0..NCORES*2 {
-        //     use shim::path::Path;
-        //     let p = Process::load(Path::new("/programs/fib.bin")).expect("failed to load fib proc");
-        //     self.add(p);
-        // }
     }
 
-    // The following method may be useful for testing Lab 4 Phase 3:
-    //
-    // * A method to load a extern function to the user process's page table.
-    //
-    pub fn load_code(vmap: &mut Box<UserPageTable>, f: *const u8) {
-        use crate::vm::{PagePerm, VirtualAddr};
-
-        let page: &mut [u8] = vmap
-            .alloc(VirtualAddr::from(USER_IMG_BASE as u64), PagePerm::RWX);
-
-        let text: &[u8] = unsafe { core::slice::from_raw_parts(f, 100) };
-
-        page[0..100].copy_from_slice(text);
-    }
 }
 
 /// Poll the ethernet driver and re-register a timer handler using
@@ -334,11 +255,12 @@ impl Scheduler {
     ///
     /// It is the caller's responsibility to ensure that the first time `switch`
     /// is called, that process is executing on the CPU.
-    fn add(&mut self, mut process: Process) -> Option<Id> {
-        let new_id = self.processes.len() as u64;
+    fn add(&mut self, process: Process) -> Option<Id> {
+        let new_id = process.context.tpidr;
+        // let new_id = self.processes.len() as u64;
         //kprint!("{}", self.processes.len());
 
-        process.context.tpidr = new_id;
+        // process.context.tpidr = new_id;
         self.processes.push_back(process);
         Some(new_id)
     }
@@ -351,12 +273,6 @@ impl Scheduler {
     /// If the `processes` queue is empty or there is no current process,
     /// returns `false`. Otherwise, returns `true`.
     fn schedule_out(&mut self, new_state: State, tf: &mut TrapFrame) -> bool {
-
-        // check for idle proc
-        if is_idle(tf.tpidr) {
-            return false;
-        }
-
 
         for (i, p) in self.processes.iter_mut().enumerate() {
             if matches!(p.state, State::Running) && p.context.tpidr == tf.tpidr {
@@ -400,7 +316,7 @@ impl Scheduler {
     /// instance, and returns the dead process's process ID.
     fn kill(&mut self, tf: &mut TrapFrame) -> Option<Id> {
         for (i, p) in self.processes.iter_mut().enumerate() {
-            if matches!(p.state, State::Running) && p.context.tpidr == tf.tpidr {
+            if p.context.tpidr == tf.tpidr {
                 p.state = State::Dead;
                 let rproc = self.processes.remove(i).unwrap();
                 let pid = rproc.context.tpidr;
@@ -443,36 +359,3 @@ impl fmt::Debug for Scheduler {
         Ok(())
     }
 }
-
-pub extern "C" fn test_user_process() -> ! {
-    loop {
-        let ms = 10000;
-        let error: u64;
-        let elapsed_ms: u64;
-
-        unsafe {
-            asm!(
-                "mov x0, {ms:x}",
-                "svc {svc_num}",
-                "mov {ems}, x0",
-                "mov {error}, x7",
-                ms = in(reg) ms,
-                svc_num = const 1,
-                ems = out(reg) elapsed_ms,
-                error = out(reg) error,
-                out("x0") _,   // Clobbers x0
-                out("x7") _,   // Clobbers x7
-                options(nostack),
-            );
-        }
-    }
-}
-
-use core::arch::asm;
-
-extern "C" fn idle_proc_code() {
-    loop {
-        core::hint::spin_loop();
-    }
-}
-

@@ -8,3 +8,7 @@ rustflags = [
     "-C", "link-arg=--script=.cargo/layout.ld",
     "-C", "link-arg=--no-dynamic-linker",
 ]
+
+[profile.release]
+debug  = 2   # embed full DWARF (or at least 1)
+strip  = "none"

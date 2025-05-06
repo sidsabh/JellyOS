@@ -1,5 +1,5 @@
 use aarch64::{affinity, current_el};
-use alloc::boxed::Box;
+use alloc::boxed::{self, Box};
 use fat32::traits::FileSystem;
 use core::time::Duration;
 
@@ -7,7 +7,7 @@ use smoltcp::wire::{IpAddress, IpEndpoint};
 
 use crate::console::kprint;
 use crate::param::USER_IMG_BASE;
-use crate::process::State;
+use crate::process::{GlobalScheduler, State};
 use crate::traps::TrapFrame;
 use crate::{ETHERNET, SCHEDULER};
 
@@ -23,16 +23,24 @@ use pi::timer;
 /// parameter: the approximate true elapsed time from when `sleep` was called to
 /// when `sleep` returned.
 pub fn sys_sleep(ms: u32, tf: &mut TrapFrame) {
+    trace!("Core {} is running sleep", affinity());
     let start = timer::current_time();
     let desired_time = timer::current_time()+Duration::from_millis(ms as u64);
-    debug!("Sleeping for {} ms, start: {:?}, desired: {:?}\n", ms, start, desired_time);
-    let boxed_fnmut = Box::new(move |_: &mut crate::process::Process| {
-        timer::current_time() >= desired_time
-    });
-    SCHEDULER.block(State::Waiting(Some(boxed_fnmut)), tf);
+    trace!("Process {}: Sleeping for {} ms, start: {:?}, desired: {:?}\n", tf.tpidr, ms, start, desired_time);
+    let boxed_fnmut = Box::new(move |process: &mut crate::process::Process| {
+        
+        let res = timer::current_time() >= desired_time;
+        if res {
+            let tf = &mut process.context;
+            tf.regs[0] = (timer::current_time() - start).as_millis() as u64;
+            tf.regs[7] = 1;
+            trace!("Process {}: Woke up, current time: {:?}", tf.tpidr, timer::current_time());
+        }
 
-    tf.regs[0] = (timer::current_time() - start).as_millis() as u64;
-    tf.regs[7] = 1;
+        res
+    });
+
+    SCHEDULER.block(State::Waiting(Some(boxed_fnmut)), tf);
 }
 
 /// Returns current time.
@@ -53,17 +61,15 @@ pub fn sys_time(tf: &mut TrapFrame) {
 ///
 /// This system call does not take paramer and does not return any value.
 pub fn sys_exit(tf: &mut TrapFrame) {
-    // get parent
-    SCHEDULER.with_current_process_mut(tf, |process| {
-        let parent = process.parent.clone();
-        parent.complete();
+    // get parent_semaphore
+    let parent_semaphore = SCHEDULER.with_current_process_mut(tf, |process| {
+         process.parent.clone()
     });
-    let id = SCHEDULER.kill(tf).expect("failed to kill proc {}");
+    parent_semaphore.complete();
+    // remove from scheduler
+    let id = SCHEDULER.kill(tf).expect("failed to kill process");
     assert!(id == tf.tpidr);
-    while SCHEDULER.switch_to(tf) == u64::MAX {
-        aarch64::wfi();
-    }
-    // TODO: can also block here
+    GlobalScheduler::idle_thread();
 }
 
 /// Writes to console.
@@ -558,7 +564,7 @@ pub fn sys_exec(va: usize, tf: &mut TrapFrame) {
             tf.regs[7] = OsError::InvalidFile as u64;
         }
     }
-    trace!("[sys_exec] ERROR: execve() should not return!");
+    debug!("[sys_exec] ERROR: execve() should not return!");
     tf.regs[7] = OsError::InvalidFile as u64;
 }
 
@@ -577,6 +583,7 @@ pub fn sys_fork(tf: &mut TrapFrame) {
     *new_proc.context = *tf; // Updated frame
     // print tf:
     new_proc.context.regs[0] = 0; // Child returns 0
+    new_proc.context.tpidr = child_descriptor as u64;
     new_proc.context.ttbr1_el1 = new_proc.vmap.get_baddr().as_u64();
     new_proc.parent = child_fut.clone();
     

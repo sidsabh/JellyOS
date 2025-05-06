@@ -119,10 +119,10 @@ impl Process {
             page.iter_mut().for_each(|x| *x = 0);
         }
 
-        let mut new_tf = Box::new(TrapFrame::default());
-        new_tf.ttbr0_el1 = process.context.ttbr0_el1;
-        new_tf.ttbr1_el1 = process.vmap.get_baddr().as_u64();
-        process.context = new_tf;
+        // let mut new_tf = Box::new(TrapFrame::default());
+        // new_tf.ttbr0_el1 = process.context.ttbr0_el1;
+        // new_tf.ttbr1_el1 = process.vmap.get_baddr().as_u64();
+        // process.context = new_tf;
         use aarch64::PState;
         let mut pstate = PState::new(0);
         pstate.set_value(0b1_u64, PState::F);
@@ -326,7 +326,7 @@ impl Process {
         let state = core::mem::replace(&mut self.state, State::Dead); // Temporarily remove state
 
         if let State::Waiting(mut f) = state {
-            if let Some(mut func) = f.as_mut() && func(self) {
+            if let Some(func) = f.as_mut() && func(self) {
                 self.state = State::Ready;
                 return true;
             } else {

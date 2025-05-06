@@ -14,9 +14,9 @@ use smoltcp::wire::EthernetAddress;
 use crate::mutex::Mutex;
 use crate::net::Frame;
 use crate::traps::irq::IrqHandlerRegistry;
-use crate::ALLOCATOR;
+use crate::{ALLOCATOR, FIQ};
 
-const DEBUG_USPI: bool = false;
+const DEBUG_USPI: bool = true; // define as false when not networking
 pub macro uspi_trace {
     () => (if DEBUG_USPI { trace!("\n") } ),
     ($fmt:expr) => (if DEBUG_USPI { trace!(concat!($fmt, "\n")) }),
@@ -148,40 +148,59 @@ unsafe fn layout(size: usize) -> Layout {
     Layout::from_size_align_unchecked(size + core::mem::size_of::<usize>(), 16)
 }
 
+
 #[no_mangle]
 fn malloc(size: u32) -> *mut c_void {
-    // Lab 5 2.B
-    unimplemented!("malloc")
+    let size = size as usize;
+    let layout = unsafe {layout(size)};
+    let ptr = unsafe { ALLOCATOR.alloc(layout) };
+
+    if ptr.is_null() {
+        uspi_trace!("malloc failed");
+        return ptr as *mut c_void;
+    }
+    let ptr = unsafe { (ptr as *mut usize).offset(1) };
+    unsafe { *ptr.offset(-1) = size as usize };
+    uspi_trace!("malloc: size = {}, ptr = {:?}", size, ptr);
+    return ptr as *mut c_void;
+
 }
 
 #[no_mangle]
 fn free(ptr: *mut c_void) {
-    // Lab 5 2.B
-    unimplemented!("free")
+    let ptr = unsafe { (ptr as *mut usize).offset(-1) };
+    let size = unsafe { *ptr };
+    let layout = unsafe { layout(size) };
+    unsafe { ALLOCATOR.dealloc(ptr as *mut u8, layout) };
+    uspi_trace!("free: size = {}, ptr = {:?}", size, ptr);
 }
 
 #[no_mangle]
 pub fn TimerSimpleMsDelay(nMilliSeconds: u32) {
-    // Lab 5 2.B
-    unimplemented!("TimerSimpleMsDelay")
+    let delay = Duration::from_millis(nMilliSeconds as u64);
+    uspi_trace!("TimerSimpleMsDelay: {:?}", delay);
+    spin_sleep(delay);
 }
 
 #[no_mangle]
 pub fn TimerSimpleusDelay(nMicroSeconds: u32) {
-    // Lab 5 2.B
-    unimplemented!("TimerSimpleusDelay")
+    let delay = Duration::from_micros(nMicroSeconds as u64);
+    uspi_trace!("TimerSimpleusDelay: {:?}", delay);
+    spin_sleep(delay);
 }
 
 #[no_mangle]
 pub fn MsDelay(nMilliSeconds: u32) {
-    // Lab 5 2.B
-    unimplemented!("MsDelay")
+    uspi_trace!("MsDelay: {:?}", nMilliSeconds);
+    // TODO: fix
+    TimerSimpleMsDelay(nMilliSeconds);
 }
 
 #[no_mangle]
 pub fn usDelay(nMicroSeconds: u32) {
-    // Lab 5 2.B
-    unimplemented!("usDelay")
+    uspi_trace!("usDelay: {:?}", nMicroSeconds);
+    // TODO: fix
+    TimerSimpleusDelay(nMicroSeconds);
 }
 
 /// Registers `pHandler` to the kernel's IRQ handler registry.
@@ -192,15 +211,28 @@ pub fn usDelay(nMicroSeconds: u32) {
 /// registry. Otherwise, register the handler to the global IRQ interrupt handler.
 #[no_mangle]
 pub unsafe fn ConnectInterrupt(nIRQ: u32, pHandler: TInterruptHandler, pParam: *mut c_void) {
-    // Lab 5 2.B
-    unimplemented!("ConnectInterrupt")
+    // kern/src/net/uspi.rs. First, assert that nIRQ is one of Interrupt::Usb or Interrupt::Timer3. Then, if the request is for USB interrupt, enable FIQ handling of USB interrupt and register a handler that invokes provided pHandler to the FIQ handler registry (crate::FIQ). Otherwise, enable IRQ handling of Timer3 interrupt and register a handler that invokes provided pHandler to the global IRQ handler registry (crate::GLOBAL_IRQ).
+    assert!(nIRQ == Interrupt::Usb as u32 || nIRQ == Interrupt::Timer3 as u32);
+    if nIRQ == Interrupt::Usb as u32 {
+       // Enable FIQ handling of USB interrupt
+    } else {
+        // Enable IRQ handling of Timer3 interrupt
+    }
+    uspi_trace!(
+        "ConnectInterrupt: nIRQ = {}, pHandler = {:?}, pParam = {:?}",
+        nIRQ,
+        pHandler,
+        pParam
+    );
 }
 
 /// Writes a log message from USPi using `uspi_trace!` macro.
 #[no_mangle]
 pub unsafe fn DoLogWrite(_pSource: *const u8, _Severity: u32, pMessage: *const u8) {
-    // Lab 5 2.B
-    unimplemented!("DoLogWrite")
+    uspi_trace!(
+        "USPi: {}",
+        String::from_utf8_lossy(slice::from_raw_parts(pMessage, 256))
+    );
 }
 
 #[no_mangle]
@@ -210,8 +242,12 @@ pub fn DebugHexdump(_pBuffer: *const c_void, _nBufLen: u32, _pSource: *const u8)
 
 #[no_mangle]
 pub unsafe fn uspi_assertion_failed(pExpr: *const u8, pFile: *const u8, nLine: u32) {
-    // Lab 5 2.B
-    unimplemented!("uspi_assertion_failed")
+    uspi_trace!(
+        "Assertion failed: {} in file {} at line {}",
+        String::from_utf8_lossy(slice::from_raw_parts(pExpr, 256)),
+        String::from_utf8_lossy(slice::from_raw_parts(pFile, 256)),
+        nLine
+    );
 }
 
 pub struct Usb(pub Mutex<Option<USPi>>);

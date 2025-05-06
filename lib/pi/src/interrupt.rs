@@ -125,7 +125,13 @@ impl Controller {
 
     /// Enables the interrupt as FIQ interrupt
     pub fn enable_fiq(&mut self, int: Interrupt) {
-        // Lab 5 2.B
-        unimplemented!("enable_fiq")
+        let source: u32 = int as u32;
+        let value = (1 << 7) | (source & 0x7F);  // Set bit 7 and interrupt source
+        self.registers.FIQ_CONTROL.write(value);
     }
+
+    pub fn disable_fiq(&mut self) {
+        self.registers.FIQ_CONTROL.write(0); // Clear bit 7 = disable
+    }
+    
 }

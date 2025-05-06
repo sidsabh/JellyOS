@@ -35,7 +35,7 @@ qemu: build
 	./qemu.sh build/$(KERN).bin -drive file=$(SDCARD),format=raw,if=sd $(QEMU_ARGS)
 
 qemu-gdb: build
-	./qemu.sh build/$(KERN).bin -drive file=$(SDCARD),format=raw,if=sd -s -S
+	./qemu.sh build/$(KERN).bin -drive file=$(SDCARD),format=raw,if=sd -S -s
 
 qemu-asm: build
 	./qemu.sh build/$(KERN).bin -drive file=$(SDCARD),format=raw,if=sd -d in_asm
@@ -49,7 +49,11 @@ run: build
 	./run.sh
 
 objdump: build
-	cargo objdump -- -disassemble -no-show-raw-insn -print-imm-hex build/$(KERN).elf
+	/opt/homebrew/opt/llvm/bin/llvm-objdump -d -S \
+		--mcpu=cortex-a53 \
+		--triple=aarch64-none-elf \
+		build/$(KERN).elf | rustfilt | less -R
+
 
 nm: build
 	cargo nm build/$(KERN).elf
