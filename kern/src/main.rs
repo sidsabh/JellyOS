@@ -56,8 +56,6 @@ static FIQ: Fiq = Fiq::new();
 static ETHERNET: GlobalEthernetDriver = GlobalEthernetDriver::uninitialized();
 
 use crate::console::kprintln;
-use pi::timer::spin_sleep;
-use core::time::Duration;
 
 extern "C" {
     static __text_beg: u64;
@@ -65,6 +63,7 @@ extern "C" {
     static __bss_beg: u64;
     static __bss_end: u64;
 }
+
 
 unsafe fn log_layout() {
     crate::logger::init_logger();
@@ -83,8 +82,6 @@ unsafe fn log_layout() {
 /// TODO: I THINK THE ISSUE WITH RUNNING ON RPI RN IS THE KERNEL SP FOR EXEC THREADS
 /// bootstrapping core
 unsafe fn kmain() -> ! {
-
-    spin_sleep(Duration::from_millis(500)); // delay after transmit for serial console
     log_layout();
     ALLOCATOR.initialize();
     FILESYSTEM.initialize();

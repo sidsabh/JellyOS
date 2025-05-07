@@ -2,7 +2,6 @@ ROOT := $(shell git rev-parse --show-toplevel)
 
 KERN := kernel
 TARGET := target/aarch64-unknown-none/release/${KERN}
-OBJCPY := cargo objcopy --bin $(KERN) --release -- -O binary --strip-all
 TTY_PATH := /dev/tty.SLAB_USBtoUART
 SDCARD ?= $(ROOT)/user/fs.img
 
@@ -12,12 +11,14 @@ all: build
 
 build:
 	@echo "+ Building build/$(KERN).elf [build/$@]"
-	@cargo build --release
+	@cargo build --release $(if $(FEATURES),--features $(FEATURES))
 	@mkdir -p build
 	@cp -f $(TARGET) build/$(KERN).elf
 
 	@echo "+ Building build/$(KERN).bin [objcopy]"
-	@$(OBJCPY) build/$(KERN).bin
+	# cargo objcopy --bin $(KERN) --release $(if $(FEATURES),--features $(FEATURES)) -- -O binary --strip-all
+	/opt/homebrew/opt/llvm/bin/llvm-objcopy -O binary build/$(KERN).elf build/$(KERN).bin
+
 
 build-all:
 	@(cd ../ext/uspi/lib; make)
@@ -40,10 +41,12 @@ qemu-gdb: build
 qemu-asm: build
 	./qemu.sh build/$(KERN).bin -drive file=$(SDCARD),format=raw,if=sd -d in_asm
 
+transmit: FEATURES := transmit
 transmit: build
 	@echo "+ Transmitting build/$(KERN).bin to $(TTY_PATH)"
 	ttywrite -i build/$(KERN).bin $(TTY_PATH)
 	screen $(TTY_PATH) 115200
+
 
 run: build
 	./run.sh

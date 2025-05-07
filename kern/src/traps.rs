@@ -61,6 +61,12 @@ pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
                         debug!("Fault addr: {:x}", FAR_EL1.get());
                     }
                 },
+                Syndrome::PCAlignmentFault => {
+                    // PC alignment fault
+                    unsafe {
+                        debug!("PC alignment fault: {:x}", aarch64::ELR_EL1.get());
+                    }
+                }
                 _ => {}
             }
             // Preferred Exception Return Address for synchronous

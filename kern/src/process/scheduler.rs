@@ -19,6 +19,7 @@ use crate::{ETHERNET, USB};
 #[derive(Debug)]
 pub struct GlobalScheduler(Mutex<Option<Box<Scheduler>>>);
 
+
 impl GlobalScheduler {
     /// Returns an uninitialized wrapper around a local scheduler.
     pub const fn uninitialized() -> GlobalScheduler {
@@ -86,6 +87,17 @@ impl GlobalScheduler {
                     scheduler.schedule_out(new_state, &mut old_tf);
                 });
             }
+
+            // print stack pointer:
+            let sp: u64;
+            unsafe {
+                asm!(
+                    "mov {sp:x}, sp",
+                    sp = out(reg) sp,
+                    options(nomem, nostack, preserves_flags)
+                );
+            }
+            trace!("SP: {:x}", sp);
             trace!(
                 "[CORE {}] Switching from process {} to process {}",
                 affinity(),
@@ -105,7 +117,7 @@ impl GlobalScheduler {
         }
     }
 
-    pub fn block(&self, new_state: State, tf: &mut TrapFrame) -> ! {
+    pub fn block(&self, new_state: State, tf: &mut TrapFrame) {
         assert!(!tf.is_idle());
 
         let mut old_tf = tf.clone();
@@ -120,7 +132,7 @@ impl GlobalScheduler {
         trace!("{:?}", tf);
 
         if id != u64::MAX {
-            Self::switch_to_user(&self, tf);
+            return;
         } else {
             info!("No process to switch to, switching to idle");
             Self::idle_thread();
@@ -152,23 +164,6 @@ impl GlobalScheduler {
     #[must_use]
     pub fn kill(&self, tf: &mut TrapFrame) -> Option<Id> {
         self.critical(|scheduler| scheduler.kill(tf))
-    }
-    pub fn switch_to_user(&self, tf: &TrapFrame) -> ! {
-        let frame_addr = tf as *const TrapFrame as *const u64 as u64;
-        // get the future process's stack
-        let kernel_stack_addr = self.critical(|scheduler| {
-            let process = scheduler.find_process(tf).expect("No running process found");
-            process.stack.top()
-        });
-        unsafe {
-            // SP.set(kernel_stack_addr.as_usize());
-            asm!(
-                "mov x0, {context:x}",
-                "bl super_restore",
-                context = in(reg) frame_addr,
-            );
-        }
-        panic!("switch to user should not return");
     }
 
     /// Starts executing processes in user space using timer interrupt based

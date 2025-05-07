@@ -32,3 +32,9 @@ smoltcp = { version = "0.6", default-features = false, features = [
 
 [dev-dependencies]
 shim = { path = "../lib/shim", features = ["alloc"]}
+
+
+[features]
+default = []
+debug = []
+transmit = []

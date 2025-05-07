@@ -108,7 +108,7 @@ impl Process {
         let page_nums = data_pages.len();
     
         for (idx, data_page) in data_pages.enumerate() {
-            let va = VirtualAddr::from(Process::get_image_base().as_usize() + PAGE_SIZE * idx);
+            let va = VirtualAddr::from(Process::get_image_base().as_usize()+PAGE_SIZE*idx);
             let page = process.vmap.alloc(va, PagePerm::RWX);
             page[..data_page.len()].copy_from_slice(data_page);
         }

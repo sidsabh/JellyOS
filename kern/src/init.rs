@@ -117,7 +117,7 @@ unsafe fn switch_to_el1() {
 
 #[no_mangle]
 unsafe fn kinit() -> ! {
-    spin_sleep(Duration::from_millis(500)); // necessary delay after transmit before tty
+    spin_sleep(Duration::from_millis(crate::param::POST_TRANSMIT_DELAY_MS)); // necessary delay after transmit before tty
     kprintln!("What just happened? Why am I here?");
     kprintln!("Discovering my identity and features!");
     kprintln!("Initial Exception Level: {:x}", current_el());    

@@ -69,10 +69,9 @@ pub fn sys_exit(tf: &mut TrapFrame) {
     if let Some(parent_semaphore) = parent_semaphore {
         // set parent semaphore
         let mut g = parent_semaphore.lock();
-        g.done = true;
-        g.exit_code = Some(0);
+        g.complete();
+        g.exit_code = Some(0); // TODO: add support for exit codes
     }
-
 
     // remove from scheduler
     let id = SCHEDULER.kill(tf).expect("failed to kill process");
@@ -560,20 +559,17 @@ pub fn sys_exec(va: usize, tf: &mut TrapFrame) {
     });
 
 
-    use crate::GlobalScheduler;
     trace!("[sys_exec] tf: {:#x?}", new_tf);
     match new_tf {
         Some(context) => {
             trace!("[sys_exec] Switching to user mode at {:#x}", context.pc);
-            GlobalScheduler::switch_to_user(&SCHEDULER,&context);
+            *tf = context; // Update the trap frame
         }
         None => {
             trace!("[sys_exec] ERROR: execve() failed!");
             tf.regs[7] = OsError::InvalidFile as u64;
         }
     }
-    debug!("[sys_exec] ERROR: execve() should not return!");
-    tf.regs[7] = OsError::InvalidFile as u64;
 }
 
 
@@ -617,7 +613,7 @@ pub fn sys_wait(tf: &mut TrapFrame, pid: usize) {
         let child = process.children.get(pid - 1);
         if child.is_none() {
             process.context.regs[7] = OsError::InvalidFile as u64;
-            return false;
+            return true;
         }
         let child = child.unwrap().lock();
         let child_done = child.done;

@@ -28,8 +28,10 @@ pub const KERN_STACK_SIZE: usize = PAGE_SIZE;
 
 /// The `tick` time.
 // FIXME: When you're ready, change this to something more reasonable.
+#[cfg(feature = "transmit")]
+pub const TICK: Duration = Duration::from_secs(1);
+#[cfg(not(feature = "transmit"))]
 pub const TICK: Duration = Duration::from_millis(1);
-// pub const TICK: Duration = Duration::from_secs(1);
 
 // Match this value with `HZ` in `timer.h`
 pub const USPI_TIMER_HZ: usize = 10;
@@ -40,3 +42,9 @@ pub const MTU: u32 = 1500;
 
 
 pub const NCORES: usize = 4;
+
+
+#[cfg(feature = "transmit")]
+pub const POST_TRANSMIT_DELAY_MS: u64 = 2000;
+#[cfg(not(feature = "transmit"))]
+pub const POST_TRANSMIT_DELAY_MS: u64 = 500;
