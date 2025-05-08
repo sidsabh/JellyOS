@@ -1,10 +1,10 @@
+use aarch64::*;
 use alloc::boxed::Box;
 use alloc::collections::vec_deque::VecDeque;
+use core::arch::asm;
 use core::ffi::c_void;
 use core::fmt;
 use core::u64;
-use core::arch::asm;
-use aarch64::*;
 use pi::local_interrupt::LocalInterrupt;
 
 use crate::mutex::Mutex;
@@ -20,34 +20,25 @@ use crate::{ETHERNET, USB};
 #[derive(Debug)]
 pub struct GlobalScheduler(Mutex<Option<Box<Scheduler>>>);
 
-use core::ptr;
 /// Offset of TPIDR_EL0 in the saved trap‑frame
-const OFF_TPIDR_EL0: usize = 24;
+const OFF_TPIDR_EL0: usize = core::mem::offset_of!(TrapFrame, tpidr);
 /// Exact number of bytes pushed by `vec_context_save`
-const FRAME_BYTES: usize   = core::mem::size_of::<TrapFrame>() - 32;
-
-unsafe fn kstack_top_of(tpidr: usize) -> Option<usize> {
-    SCHEDULER.critical(|s| {
-        s.find_process_by_id(tpidr).map(|p| p.stack.top().as_usize())
-    })
-}
-
-/// Safe wrapper around `switch_stack` so we can call it like a normal fn
+const FRAME_BYTES: usize = core::mem::size_of::<TrapFrame>();
 #[no_mangle]
-pub unsafe extern "C" fn switch_stack(tpidr: usize, old_sp: usize) -> usize {
-    if let Some(ksp_top) = kstack_top_of(tpidr) {
+pub unsafe extern "C" fn switch_stack(old_sp: usize) -> usize {
+    let tpidr_addr = old_sp + OFF_TPIDR_EL0;
+    let tpidr: usize = core::ptr::read(tpidr_addr as *const usize);
+    if let Some(ksp_top) = SCHEDULER.critical(|s| {
+        s.find_process_by_id(tpidr)
+            .map(|p| p.stack.top().as_usize())
+    }) {
         let new_sp = (ksp_top - FRAME_BYTES) & !0xF;
-        core::ptr::copy_nonoverlapping::<u8>(
-            old_sp as *const u8,
-            new_sp as *mut u8,
-            FRAME_BYTES,
-        );
+        core::ptr::copy_nonoverlapping::<u8>(old_sp as *const u8, new_sp as *mut u8, FRAME_BYTES);
         new_sp
     } else {
         old_sp
     }
 }
-
 
 impl GlobalScheduler {
     /// Returns an uninitialized wrapper around a local scheduler.
@@ -64,7 +55,12 @@ impl GlobalScheduler {
         }
         loop {
             unsafe {
-                SP.set(crate::param::KERN_STACK_BASE - crate::param::KERN_STACK_SIZE * MPIDR_EL1.get_value(MPIDR_EL1::Aff0) as usize);
+                // reset stack pointer for idle threads
+                SP.set(
+                    crate::param::KERN_STACK_BASE
+                        - crate::param::KERN_STACK_SIZE
+                            * MPIDR_EL1.get_value(MPIDR_EL1::Aff0) as usize,
+                );
                 sti();
             }
             wfi();
@@ -88,7 +84,7 @@ impl GlobalScheduler {
 
     /// Adds a process to the scheduler's queue and returns that process's ID.
     /// For more details, see the documentation on `Scheduler::add()`.
-    pub fn add(&self, process: Process) -> Option<Id> {
+    pub fn add(&self, process: Process) -> Id {
         self.critical(move |scheduler| scheduler.add(process))
     }
 
@@ -138,7 +134,7 @@ impl GlobalScheduler {
         trace!("{:?}", tf);
 
         if id != u64::MAX {
-            return;
+            return; // block calls from syscall
         } else {
             info!("No process to switch to, switching to idle");
             Self::idle_thread();
@@ -256,7 +252,7 @@ impl Scheduler {
     ///
     /// It is the caller's responsibility to ensure that the first time `switch`
     /// is called, that process is executing on the CPU.
-    fn add(&mut self, mut process: Process) -> Option<Id> {
+    fn add(&mut self, mut process: Process) -> Id {
         let new_id = self.last_id;
         self.last_id += 1;
         // let new_id = self.processes.len() as u64;
@@ -266,7 +262,7 @@ impl Scheduler {
 
         process.context.tpidr = new_id;
         self.processes.push_back(process);
-        Some(new_id)
+        new_id
     }
 
     /// Finds the currently running process, sets the current process's state
@@ -338,13 +334,8 @@ impl Scheduler {
     /// Finds a process corresponding with tpidr saved in a trap frame.
     /// Panics if the search fails.
     pub fn find_process(&mut self, tf: &TrapFrame) -> Option<&mut Process> {
-        for i in 0..self.processes.len() {
-            if self.processes[i].context.tpidr == tf.tpidr {
-                return Some(&mut self.processes[i]);
-            }
+            self.find_process_by_id(tf.tpidr as usize)
         }
-        None
-    }
 
     pub fn find_process_by_id(&mut self, tpidr: usize) -> Option<&mut Process> {
         for i in 0..self.processes.len() {

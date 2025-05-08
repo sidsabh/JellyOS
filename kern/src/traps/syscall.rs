@@ -598,13 +598,13 @@ pub fn sys_fork(tf: &mut TrapFrame) {
     new_proc.parent = Some(child_fut.clone());
 
         
-    let id = SCHEDULER.add(new_proc).unwrap(); // Add the new process to the scheduler
+    let id = SCHEDULER.add(new_proc); // Add the new process to the scheduler
 
 
     // Set the child process's PID
     {
         let mut g = child_fut.lock();
-        g.pid = Some(id);
+        g.pid = Some(id); // technically should be set before add , but whatever
     }
     
     // // Parent returns child PID
@@ -615,15 +615,23 @@ pub fn sys_fork(tf: &mut TrapFrame) {
 pub fn sys_wait(tf: &mut TrapFrame, pid: usize) {
 
     let boxed_fnmut = Box::new(move |process: &mut crate::process::Process| {
-        let child = process.children.get(pid - 1);
+        let mut child = None;
+        let mut child_done : bool = false;
+        for c in process.children.iter() {
+            let g = c.lock();
+            if g.pid == Some(pid as u64) {
+                child = Some(c.clone());
+                child_done = g.done;
+                break;
+            }
+        }
+
         if child.is_none() {
             process.context.regs[7] = OsError::InvalidFile as u64;
             return true;
         }
-        let child = child.unwrap().lock();
-        let child_done = child.done;
         if child_done {
-            process.context.regs[0] = child.pid.unwrap() as u64;
+            process.context.regs[0] = pid as u64;
             // process.context.regs[1] = child.exit_code.unwrap() as u64;
             process.context.regs[7] = OsError::Ok as u64;
         }

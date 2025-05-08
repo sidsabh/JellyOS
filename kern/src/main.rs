@@ -80,8 +80,6 @@ unsafe fn log_layout() {
 }
 
 
-/// TODO: I THINK THE ISSUE WITH RUNNING ON RPI RN IS THE KERNEL SP FOR EXEC THREADS
-/// bootstrapping core
 unsafe fn kmain() -> ! {
     log_layout();
     ALLOCATOR.initialize();

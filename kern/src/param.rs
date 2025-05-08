@@ -27,9 +27,8 @@ pub const KERN_STACK_ALIGN: usize = PAGE_ALIGN;
 pub const KERN_STACK_SIZE: usize = PAGE_SIZE;
 
 /// The `tick` time.
-// FIXME: When you're ready, change this to something more reasonable.
 #[cfg(feature = "transmit")]
-pub const TICK: Duration = Duration::from_secs(1);
+pub const TICK: Duration = Duration::from_millis(100);
 #[cfg(not(feature = "transmit"))]
 pub const TICK: Duration = Duration::from_millis(1);
 

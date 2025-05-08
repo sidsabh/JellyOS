@@ -55,7 +55,7 @@ impl Process {
         let state = State::Ready;
 
         context.ksp = stack.top().as_u64();
-        kprintln!("[new] ksp: {:#x}", context.ksp);
+        trace!("[new] ksp: {:#x}", context.ksp);
 
         let upt = UserPageTable::new();
         
