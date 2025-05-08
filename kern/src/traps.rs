@@ -8,6 +8,7 @@ use crate::process::GlobalScheduler;
 pub use self::frame::TrapFrame;
 
 use crate::{FIQ, GLOBAL_IRQ, SCHEDULER};
+use aarch64::HCR_EL2::TPC;
 use aarch64::{affinity, current_el, FAR_EL1};
 use pi::interrupt::{Controller, Interrupt};
 use pi::local_interrupt::{LocalController, LocalInterrupt};
@@ -48,6 +49,21 @@ use crate::{shell, IRQ};
 /// the trap frame for the exception.
 #[no_mangle]
 pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
+
+    // PRINT SP IF TPIDR isnt' max
+    let tpidr : u64;
+    unsafe {
+        core::arch::asm!("mrs {}, tpidr_el0", out(reg) tpidr);
+    }
+    let sp: u64;
+    unsafe {
+        core::arch::asm!("mov {}, sp", out(reg) sp);
+    }
+    if tpidr != core::usize::MAX as u64 {
+        trace!("SP: {:#x}, TPIDR: {:#x}", sp, tpidr);
+    }
+    
+
     // trace!("info: {:#?}", info);
     match info.kind {
         Kind::Synchronous if let Syndrome::Svc(num) = Syndrome::from(esr) => {
@@ -69,9 +85,10 @@ pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
                 }
                 _ => {}
             }
+            // core
             // Preferred Exception Return Address for synchronous
             // is the address of instr that generated exception
-            panic!("{:#?}, {}, {:#?}", info, esr, Syndrome::from(esr));
+            panic!("[core-{}] {:#?}, {}, {:#?}", affinity(), info, esr, Syndrome::from(esr));
             // info!("Unhandled exception: {:#?}, {:#?}", info, Syndrome::from(esr));
             // info!("TrapFrame: {:#x?}", tf);
             // let _ = SCHEDULER.kill(tf);

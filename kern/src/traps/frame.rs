@@ -12,7 +12,7 @@ pub struct TrapFrame {
     pub ttbr1_el1 : u64, // User page table base register
     big_regs : [u128; 32],
     pub regs : [u64; 31],
-    reserved : u64,
+    pub ksp : u64, // Kernel SP when exception occurs
 }
 
 impl TrapFrame {

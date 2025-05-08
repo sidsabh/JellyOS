@@ -9,6 +9,7 @@ use shim::path::Path;
 use aarch64;
 use smoltcp::socket::SocketHandle;
 
+use crate::console::kprintln;
 use crate::{param::*, FILESYSTEM};
 use crate::process::*;
 use crate::traps::TrapFrame;
@@ -16,6 +17,8 @@ use crate::vm::*;
 use aarch64::PState;
 
 // use kernel_api::{OsError, OsResult};
+
+
 
 /// Type alias for the type of a process ID.
 pub type Id = u64;
@@ -47,9 +50,12 @@ impl Process {
     /// If enough memory could not be allocated to start the process, returns
     /// `None`. Otherwise returns `Some` of the new `Process`.
     pub fn new(parent: Option<Arc<Mutex<ChildStatus>>>) -> OsResult<Process> {
-        let context = Box::new(TrapFrame::default());
+        let mut context = Box::new(TrapFrame::default());
         let stack = Stack::new().ok_or(OsError::NoMemory)?;
         let state = State::Ready;
+
+        context.ksp = stack.top().as_u64();
+        kprintln!("[new] ksp: {:#x}", context.ksp);
 
         let upt = UserPageTable::new();
         
@@ -85,7 +91,7 @@ impl Process {
     }
 
 
-    pub fn execve<P: AsRef<Path>>(process: &mut Process, pn: P, args: Vec<&str>) -> Result<(), OsError> {
+    pub fn execve<P: AsRef<Path>>(process: &mut Process, pn: P, args: Vec<String>) -> Result<(), OsError> {
         use fat32::traits::FileSystem;
         use shim::io::Read;
     
@@ -102,6 +108,10 @@ impl Process {
             trace!("[execve] Error: Failed to read file");
             OsError::InvalidFile
         })?;
+
+         // allocate one page for stack
+        let page = process.vmap.alloc(Process::get_stack_base(), PagePerm::RWX);
+        page.iter_mut().for_each(|x| *x = 0);
     
         // Allocate pages for the process image
         let data_pages = data.chunks(PAGE_SIZE);
@@ -121,10 +131,11 @@ impl Process {
             page.iter_mut().for_each(|x| *x = 0);
         }
 
-        // let mut new_tf = Box::new(TrapFrame::default());
-        // new_tf.ttbr0_el1 = process.context.ttbr0_el1;
-        // new_tf.ttbr1_el1 = process.vmap.get_baddr().as_u64();
-        // process.context = new_tf;
+        let mut new_tf = Box::new(TrapFrame::default());
+        new_tf.ttbr0_el1 = process.context.ttbr0_el1;
+        new_tf.ttbr1_el1 = process.vmap.get_baddr().as_u64();
+        new_tf.tpidr = process.context.tpidr;
+        process.context = new_tf;
         use aarch64::PState;
         let mut pstate = PState::new(0);
         pstate.set_value(0b1_u64, PState::F);
@@ -165,38 +176,17 @@ impl Process {
         // Now, arg_ptrs[0] is the pointer to the first argument string, etc.
 
         // --- Step 2: Push the argv array (an array of u64 pointers) ---
-        // We want to store [ arg_ptrs[0], arg_ptrs[1], ..., NULL ] on the stack.
-        // First, push a null pointer as the terminator.
-        let mut arg_ptrs = Vec::new();
-        for arg in args.iter() {
-            let len = arg.len() + 1; // +1 for null terminator.
-            sp = unsafe { sp.sub(len) }; // Allocate space for the string.
-            unsafe {
-                core::ptr::copy_nonoverlapping(arg.as_ptr(), sp, arg.len());
-                *sp.add(arg.len()) = 0; // Write null terminator.
-            }
-            // Save this string’s address.
-            arg_ptrs.push(sp as u64);
-        }
-        // Now, arg_ptrs[0] is the pointer to the first argument string, etc.
-    
-        // --- Step 2: Push the argv array (an array of u64 pointers) ---
         // We want to create an array: [ arg_ptrs[0], arg_ptrs[1], ..., NULL ]
         // First, push a null pointer as the terminator.
         sp = unsafe { sp.sub(core::mem::size_of::<u64>()) };
         unsafe { *(sp as *mut u64) = 0 };
-    
         // Then push each pointer from arg_ptrs in reverse order,
         // so that the lowest memory (highest address) gets the first argument.
         for ptr_val in arg_ptrs.iter().rev() {
             sp = unsafe { sp.sub(core::mem::size_of::<u64>()) };
             unsafe { *(sp as *mut u64) = *ptr_val };
         }
-        // At this point, the argv array starts at the current sp.
-        // Save its address; however, note that we haven't yet pushed argc.
-        // We'll compute the final argv pointer after pushing argc.
-        let temp_argv_ptr = sp as u64;
-    
+
         // --- Step 3: Push argc onto the stack ---
         let argc = args.len() as u64;
         sp = unsafe { sp.sub(core::mem::size_of::<u64>()) };
@@ -217,7 +207,7 @@ impl Process {
         process.context.regs[0] = argc;
         process.context.regs[1] = final_argv_ptr;
     
-        trace!("[execve] Stack set up: argc = {}, argv_ptr = {:#x}", argc, final_argv_ptr);
+        debug!("[execve] Stack set up: argc = {}, argv_ptr = {:#x}", argc, final_argv_ptr);
 
         Ok(())
     }

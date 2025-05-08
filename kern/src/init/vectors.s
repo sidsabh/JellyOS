@@ -56,7 +56,7 @@ vec_context_save:
     mrs x0, SP_EL0
     mrs x1, TPIDR_EL0
     stp x0, x1, [SP, #-16]!
-    
+
     mrs x0, ELR_EL1
     mrs x1, SPSR_EL1
     stp x0, x1, [SP, #-16]!
@@ -64,9 +64,16 @@ vec_context_save:
     ret
 
 
+.global switch_to_user
+switch_to_user:
+    bl vec_context_restore
+    ldp     x28, x29, [SP], #16
+    ldp     lr, xzr, [SP], #16
+    eret
+
+
 .global vec_context_restore
 vec_context_restore:
-    
     ldp x0, x1, [SP], #16
     msr ELR_EL1, x0
     msr SPSR_EL1, x1
@@ -74,6 +81,14 @@ vec_context_restore:
     ldp x0, x1, [SP], #16
     msr SP_EL0, x0
     msr TPIDR_EL0, x1
+
+    mov x28, lr
+    mov     x1, sp          // old_sp
+    mrs     x0, tpidr_el0   // tpidr
+    bl      switch_stack
+    mov     sp, x0
+    mov lr, x28
+
 
     ldp x0, x1, [SP], #16
     msr TTBR0_EL1, x0

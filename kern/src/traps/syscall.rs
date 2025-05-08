@@ -542,17 +542,21 @@ pub fn sys_exec(va: usize, tf: &mut TrapFrame) {
                     }
                     core::str::from_utf8(core::slice::from_raw_parts(arg_ptr, len)).unwrap_or("[Invalid UTF-8]")
                 };
+                // move to heap then push
+                use crate::alloc::string::ToString;
+                let arg_str = arg_str.to_string();
                 args.push(arg_str);
             }
         }
     }
 
-    trace!("[sys_exec] Executing: '{}'", clean_path);
-    trace!("[sys_exec] Args: {:?}", args);
+    debug!("[sys_exec] Executing: '{}'", clean_path);
+    debug!("[sys_exec] Args: {:?}", args);
+    debug!("core {} is running execve", affinity());
 
     // Run execve() and update process.context, etc.
     let new_tf = SCHEDULER.with_current_process_mut(tf, |process| {
-        match Process::execve(process, Path::new(clean_path), args.clone()) {
+        match Process::execve(process, Path::new(clean_path), args) {
             Ok(_) => Some(*process.context),
             Err(_) => None,
         }
@@ -562,8 +566,9 @@ pub fn sys_exec(va: usize, tf: &mut TrapFrame) {
     trace!("[sys_exec] tf: {:#x?}", new_tf);
     match new_tf {
         Some(context) => {
-            trace!("[sys_exec] Switching to user mode at {:#x}", context.pc);
+            debug!("[sys_exec] Switching to user mode at {:#x}", context.pc);
             *tf = context; // Update the trap frame
+            // TLB flush happens before eret
         }
         None => {
             trace!("[sys_exec] ERROR: execve() failed!");

@@ -13,11 +13,40 @@ use crate::process::{Id, Process, State};
 use crate::traps::irq::IrqHandlerRegistry;
 use crate::traps::TrapFrame;
 use crate::GLOBAL_IRQ;
+use crate::SCHEDULER;
 use crate::{ETHERNET, USB};
 
 /// Process scheduler for the entire machine.
 #[derive(Debug)]
 pub struct GlobalScheduler(Mutex<Option<Box<Scheduler>>>);
+
+use core::ptr;
+/// Offset of TPIDR_EL0 in the saved trap‑frame
+const OFF_TPIDR_EL0: usize = 24;
+/// Exact number of bytes pushed by `vec_context_save`
+const FRAME_BYTES: usize   = core::mem::size_of::<TrapFrame>() - 32;
+
+unsafe fn kstack_top_of(tpidr: usize) -> Option<usize> {
+    SCHEDULER.critical(|s| {
+        s.find_process_by_id(tpidr).map(|p| p.stack.top().as_usize())
+    })
+}
+
+/// Safe wrapper around `switch_stack` so we can call it like a normal fn
+#[no_mangle]
+pub unsafe extern "C" fn switch_stack(tpidr: usize, old_sp: usize) -> usize {
+    if let Some(ksp_top) = kstack_top_of(tpidr) {
+        let new_sp = (ksp_top - FRAME_BYTES) & !0xF;
+        core::ptr::copy_nonoverlapping::<u8>(
+            old_sp as *const u8,
+            new_sp as *mut u8,
+            FRAME_BYTES,
+        );
+        new_sp
+    } else {
+        old_sp
+    }
+}
 
 
 impl GlobalScheduler {
@@ -27,20 +56,23 @@ impl GlobalScheduler {
     }
 
     pub fn idle_thread() -> ! {
+        unsafe {
+            asm!(
+                "msr tpidr_el0, {max:x}",
+                max = in(reg) u64::MAX,
+            );
+        }
         loop {
             unsafe {
-                asm!(
-                    "mov x0, {max:x}",
-                    "msr tpidr_el0, x0",
-                    max = in(reg) u64::MAX,
-                );
                 SP.set(crate::param::KERN_STACK_BASE - crate::param::KERN_STACK_SIZE * MPIDR_EL1.get_value(MPIDR_EL1::Aff0) as usize);
-            }
-            trace!("Idle thread running on core {}", aarch64::affinity());
-            unsafe {
                 sti();
-            } // enable IRQs for the nap
-            wfi(); // sleep until *next* interrupt
+            }
+            wfi();
+            let tpidr: u64;
+            unsafe {
+                asm!("mrs {reg}, tpidr_el0", reg = out(reg) tpidr);
+            }
+            assert!(tpidr == u64::MAX);
         }
     }
 
@@ -76,9 +108,6 @@ impl GlobalScheduler {
     /// restoring the next process's trap frame into `tf`. For more details, see
     /// the documentation on `Scheduler::schedule_out()` and `Scheduler::switch_to()`.
     pub fn switch(&self, new_state: State, tf: &mut TrapFrame) -> Id {
-        trace!("Switch called");
-
-        let og_id = tf.tpidr;
         if !tf.is_idle() {
             let mut old_tf = tf.clone();
             let id = self.switch_to(tf);
@@ -87,32 +116,9 @@ impl GlobalScheduler {
                     scheduler.schedule_out(new_state, &mut old_tf);
                 });
             }
-
-            // print stack pointer:
-            let sp: u64;
-            unsafe {
-                asm!(
-                    "mov {sp:x}, sp",
-                    sp = out(reg) sp,
-                    options(nomem, nostack, preserves_flags)
-                );
-            }
-            trace!("SP: {:x}", sp);
-            trace!(
-                "[CORE {}] Switching from process {} to process {}",
-                affinity(),
-                og_id,
-                id
-            );
             id
         } else {
             let id = self.switch_to(tf);
-            trace!(
-                "[IDLE] [CORE {}] Switching from process {} to process {}",
-                affinity(),
-                og_id,
-                id
-            );
             id
         }
     }
@@ -174,7 +180,6 @@ impl GlobalScheduler {
             self.initialize_global_timer_interrupt();
         }
         self.initialize_local_timer_interrupt();
-
         Self::idle_thread();
     }
 
@@ -199,40 +204,8 @@ impl GlobalScheduler {
             LocalInterrupt::CntPnsIrq,
             Box::new(|tf: &mut TrapFrame| {
                 trace!("Timer interrupt on core {}", aarch64::affinity());
-
-                // debug!("Is idle? {}", tf.is_idle());
-                // tf was the interrupted processes' trap frame
                 pi::local_interrupt::local_tick_in(aarch64::affinity(), crate::param::TICK);
                 self.switch(State::Ready, tf); // context switch
-
-                // // print current EL
-                // let mut current_el: u64;
-                // unsafe {
-                //     asm!(
-                //         "mrs {current_el}, CurrentEL",
-                //         current_el = out(reg) current_el,
-                //         options(nomem, nostack, preserves_flags)
-                //     );
-                // }
-                // current_el >>= 2; // shift right to get the current EL
-                // debug!("Current EL: {:x}", current_el);
-
-                // assert!(current_el == 1, "Current EL is not EL1");
-
-                // // print SPSEL
-                // let mut spsel: u64;
-                // unsafe {
-                //     asm!(
-                //         "mrs {spsel}, SPSel",
-                //         spsel = out(reg) spsel,
-                //         options(nomem, nostack, preserves_flags)
-                //     );
-                // }
-                // debug!("SPSel: {:x}", spsel);
-
-                // print SP_EL1
-                // let sp_el1 = SP.get();
-                // debug!("SP_EL1 = {:#x}", sp_el1);
             }),
         );
 
@@ -367,6 +340,15 @@ impl Scheduler {
     pub fn find_process(&mut self, tf: &TrapFrame) -> Option<&mut Process> {
         for i in 0..self.processes.len() {
             if self.processes[i].context.tpidr == tf.tpidr {
+                return Some(&mut self.processes[i]);
+            }
+        }
+        None
+    }
+
+    pub fn find_process_by_id(&mut self, tpidr: usize) -> Option<&mut Process> {
+        for i in 0..self.processes.len() {
+            if self.processes[i].context.tpidr == tpidr.try_into().unwrap() {
                 return Some(&mut self.processes[i]);
             }
         }

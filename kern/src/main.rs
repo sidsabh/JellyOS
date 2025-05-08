@@ -2,6 +2,7 @@
 #![no_main]
 
 // extra features
+#![feature(naked_functions)]
 #![allow(internal_features)]
 #![feature(ptr_internals)]
 #![feature(raw_vec_internals)]

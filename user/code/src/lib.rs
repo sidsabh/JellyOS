@@ -56,11 +56,13 @@ unsafe fn setup_memory() {
     let (start, end) = memory_map();
     ALLOCATOR.initialize(start, end);
 
+    println!("heap beg: {:016x}, end: {:016x}", start, end);
+
     // initialize logger
     init_logger();
-    if syscall::getpid() != 0 {
-        return;
-    }
+    // if syscall::getpid() != 0 {
+    //     return;
+    // }
     
     debug!("text beg: {:016x}, end: {:016x}",
         addr_of!(__text_beg) as *const _ as u64, addr_of!(__text_end) as *const _ as u64
@@ -69,7 +71,7 @@ unsafe fn setup_memory() {
         "bss  beg: {:016x}, end: {:016x}",
         addr_of!(__bss_beg) as *const _ as u64, addr_of!(__bss_end) as *const _ as u64
     );
-    trace!("heap beg: {:016x}, end: {:016x}", start, end);
+    // trace!("heap beg: {:016x}, end: {:016x}", start, end);
 }
 
 extern "Rust" {
@@ -87,14 +89,11 @@ fn call_exit() -> ! {
 pub unsafe extern "C" fn _start() -> ! {
     core::arch::naked_asm!(
         "
-        sub sp, sp, #16        // Allocate space on stack
-        str x0, [sp, #8]       // Store argc
-        str x1, [sp]           // Store argv
+        stp x0, x1, [SP, #-16]!
 
         bl setup_memory   // Call setup_memory()
 
-        ldr x0, [sp, #8]       // Load argc into x0
-        ldr x1, [sp]           // Load argv into x1
+        ldp x0, x1, [SP], #16
 
         bl main           // Call main(argc, argv)
 
@@ -117,6 +116,7 @@ use core::str::from_utf8;
 
 
 pub fn get_args(argc: usize, argv_ptr: *const *const u8) -> Vec<String> {
+    println!("[DEBUG] _start before main: argc = {}, argv_ptr = {:#x}", argc, argv_ptr as usize);
     let mut args: Vec<String> = Vec::new();
     for i in 0..argc {
         let arg_ptr = unsafe { *argv_ptr.add(i) };

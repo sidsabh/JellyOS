@@ -44,7 +44,9 @@ impl Stack {
 
     /// Returns the physical address of top of the stack.
     pub fn top(&self) -> PhysicalAddr {
-        unsafe { self.as_mut_ptr().add(Self::SIZE).into() }
+        
+        let ksp = unsafe { self.as_mut_ptr().add(Self::SIZE) as usize };
+        heap::align_down(ksp, 0x80).into()
     }
 
     /// Returns the physical address of bottom of the stack.
