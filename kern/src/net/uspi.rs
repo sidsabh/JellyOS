@@ -14,13 +14,14 @@ use smoltcp::wire::EthernetAddress;
 use crate::mutex::Mutex;
 use crate::net::Frame;
 use crate::traps::irq::IrqHandlerRegistry;
-use crate::{ALLOCATOR, FIQ};
+use crate::{ALLOCATOR, FIQ, GLOBAL_IRQ};
+
 
 const DEBUG_USPI: bool = true; // define as false when not networking
 pub macro uspi_trace {
-    () => (if DEBUG_USPI { trace!("\n") } ),
-    ($fmt:expr) => (if DEBUG_USPI { trace!(concat!($fmt, "\n")) }),
-    ($fmt:expr, $($arg:tt)*) => (if DEBUG_USPI { trace!(concat!($fmt, "\n"), $($arg)*) })
+    () => (if DEBUG_USPI { debug!("\n") } ),
+    ($fmt:expr) => (if DEBUG_USPI { debug!(concat!($fmt, "\n")) }),
+    ($fmt:expr, $($arg:tt)*) => (if DEBUG_USPI { debug!(concat!($fmt, "\n"), $($arg)*) })
 }
 
 pub type TKernelTimerHandle = u64;
@@ -191,18 +192,16 @@ pub fn TimerSimpleusDelay(nMicroSeconds: u32) {
 
 #[no_mangle]
 pub fn MsDelay(nMilliSeconds: u32) {
-    uspi_trace!("MsDelay: {:?}", nMilliSeconds);
-    // TODO: fix
     TimerSimpleMsDelay(nMilliSeconds);
 }
 
 #[no_mangle]
 pub fn usDelay(nMicroSeconds: u32) {
-    uspi_trace!("usDelay: {:?}", nMicroSeconds);
-    // TODO: fix
     TimerSimpleusDelay(nMicroSeconds);
 }
 
+
+use crate::traps::TrapFrame;
 /// Registers `pHandler` to the kernel's IRQ handler registry.
 /// When the next time the kernel receives `nIRQ` signal, `pHandler` handler
 /// function should be invoked with `pParam`.
@@ -210,29 +209,63 @@ pub fn usDelay(nMicroSeconds: u32) {
 /// If `nIRQ == Interrupt::Usb`, register the handler to FIQ interrupt handler
 /// registry. Otherwise, register the handler to the global IRQ interrupt handler.
 #[no_mangle]
-pub unsafe fn ConnectInterrupt(nIRQ: u32, pHandler: TInterruptHandler, pParam: *mut c_void) {
-    // kern/src/net/uspi.rs. First, assert that nIRQ is one of Interrupt::Usb or Interrupt::Timer3. Then, if the request is for USB interrupt, enable FIQ handling of USB interrupt and register a handler that invokes provided pHandler to the FIQ handler registry (crate::FIQ). Otherwise, enable IRQ handling of Timer3 interrupt and register a handler that invokes provided pHandler to the global IRQ handler registry (crate::GLOBAL_IRQ).
-    assert!(nIRQ == Interrupt::Usb as u32 || nIRQ == Interrupt::Timer3 as u32);
+pub unsafe fn ConnectInterrupt(
+    nIRQ: u32,
+    pHandler: TInterruptHandler,
+    pParam: *mut c_void,
+) {
+    assert!(
+        nIRQ == Interrupt::Usb as u32 || nIRQ == Interrupt::Timer3 as u32,
+        "unsupported IRQ number {}",
+        nIRQ
+    );
+
+    // Copy the raw values; convert the pointer to a plain integer.
+    let handler  = pHandler;           // function pointer
+    let param_us = pParam as usize;    // store as integer ⇒ Send
+
     if nIRQ == Interrupt::Usb as u32 {
-       // Enable FIQ handling of USB interrupt
+        Controller::new().enable_fiq(Interrupt::Usb);
+
+        FIQ.register((), Box::new(move |_tf: &mut TrapFrame| {
+            if let Some(h) = handler {
+                h(param_us as *mut c_void);
+            }
+        }));
     } else {
-        // Enable IRQ handling of Timer3 interrupt
+        Controller::new().enable(Interrupt::Timer3);
+
+        GLOBAL_IRQ.register(Interrupt::Timer3, Box::new(move |_tf: &mut TrapFrame| {
+            if let Some(h) = handler {
+                h(param_us as *mut c_void);
+            }
+        }));
     }
+
     uspi_trace!(
         "ConnectInterrupt: nIRQ = {}, pHandler = {:?}, pParam = {:?}",
-        nIRQ,
-        pHandler,
-        pParam
+        nIRQ, pHandler, pParam
     );
 }
 
+use core::ffi::CStr;
+
 /// Writes a log message from USPi using `uspi_trace!` macro.
 #[no_mangle]
-pub unsafe fn DoLogWrite(_pSource: *const u8, _Severity: u32, pMessage: *const u8) {
-    uspi_trace!(
-        "USPi: {}",
-        String::from_utf8_lossy(slice::from_raw_parts(pMessage, 256))
-    );
+pub unsafe extern "C" fn DoLogWrite(
+    _pSource: *const u8,
+    _Severity: u32,
+    pMessage: *const u8,
+) {
+    if pMessage.is_null() {
+        return;
+    }
+
+    // Interpret as null-terminated C string
+    let c_str = CStr::from_ptr(pMessage);
+    let msg = c_str.to_str().unwrap_or("<invalid UTF-8>");
+
+    uspi_trace!("USPi: {}", msg);
 }
 
 #[no_mangle]
@@ -242,13 +275,24 @@ pub fn DebugHexdump(_pBuffer: *const c_void, _nBufLen: u32, _pSource: *const u8)
 
 #[no_mangle]
 pub unsafe fn uspi_assertion_failed(pExpr: *const u8, pFile: *const u8, nLine: u32) {
-    uspi_trace!(
-        "Assertion failed: {} in file {} at line {}",
-        String::from_utf8_lossy(slice::from_raw_parts(pExpr, 256)),
-        String::from_utf8_lossy(slice::from_raw_parts(pFile, 256)),
-        nLine
-    );
+    if pExpr.is_null() || pFile.is_null() {
+        uspi_trace!("USPi ASSERTION FAILED: <null pointer>");
+        return;
+    }
+
+    let file = CStr::from_ptr(pFile)
+        .to_str()
+        .unwrap_or("<invalid file>");
+    let expr = CStr::from_ptr(pExpr)
+        .to_str()
+        .unwrap_or("<invalid expr>");
+
+    uspi_trace!("USPi ASSERTION FAILED");
+    uspi_trace!("  File: {}", file);
+    uspi_trace!("  Line: {}", nLine);
+    uspi_trace!("  Expr: {}", expr);
 }
+
 
 pub struct Usb(pub Mutex<Option<USPi>>);
 

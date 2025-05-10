@@ -54,6 +54,7 @@ impl From<usize> for LocalInterrupt {
 }
 
 /// BCM2837 Local Peripheral Registers (QA7: Chapter 4)
+/// https://datasheets.raspberrypi.com/bcm2836/bcm2836-peripherals.pdf
 #[repr(C)]
 #[allow(non_snake_case)]
 struct Registers {

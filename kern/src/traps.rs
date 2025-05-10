@@ -68,7 +68,12 @@ pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
     match info.kind {
         Kind::Synchronous if let Syndrome::Svc(num) = Syndrome::from(esr) => {
             trace!("tf: {:#?}", tf);
-            handle_syscall(num, tf);
+            //  handle syscall with fiq enaled
+            unsafe {
+                aarch64::with_fiq_enabled(|| {
+                    handle_syscall(num, tf);
+                });
+            }
         }
         Kind::Synchronous => {
             match Syndrome::from(esr) {
@@ -98,23 +103,28 @@ pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
             let mut handled = false;
 
             let global_controller = Controller::new();
-            if affinity() == 0 {
-                for i in Interrupt::iter() {
-                    if global_controller.is_pending(i) {
-                        // info!("{:#?}, idx:{:#?} ", info, i);
-                        GLOBAL_IRQ.invoke(i, tf);
-                        handled = true;
-                        break;
-                    }
-                }
-            }
+            // TODO: Fix
+            // if affinity() == 0 {
+            //     for i in Interrupt::iter() {
+            //         if global_controller.is_pending(i) {
+            //             // info!("{:#?}, idx:{:#?} ", info, i);
+            //             GLOBAL_IRQ.invoke(i, tf);
+            //             handled = true;
+            //             break;
+            //         }
+            //     }
+            // }
 
             if !handled {
                 let local_controller = LocalController::new(affinity());
                 for i in LocalInterrupt::iter() {
                     if local_controller.is_pending(i) {
                         // debug!("{:#?}, idx:{:#?} ", info, i);
-                        IRQ.invoke(i, tf);
+                        unsafe {
+                            aarch64::with_fiq_enabled(|| {
+                                IRQ.invoke(i, tf);
+                            });
+                        }
                         handled = true;
                         break;
                     }
@@ -126,10 +136,12 @@ pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
             }
         }
         Kind::Fiq => {
+            // Can only have one FIQ handler
             FIQ.invoke((), tf);
         }
         Kind::SError => {
             debug!("SError trap");
         }
     }
+
 }

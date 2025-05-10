@@ -36,6 +36,7 @@ mod shell;
 mod traps;
 mod vm;
 
+use aarch64::{disable_fiq_interrupt, enable_fiq_interrupt, with_fiq_enabled};
 use allocator::Allocator;
 use fs::FileSystem;
 use net::uspi::Usb;
@@ -86,6 +87,15 @@ unsafe fn kmain() -> ! {
     FILESYSTEM.initialize();
     VMM.initialize();
     SCHEDULER.initialize();
+    
+    // Network initialization
+    with_fiq_enabled(|| {
+        USB.initialize();
+        ETHERNET.initialize();
+        assert!(USB.is_eth_available(), "USB Ethernet not available");
+        while !USB.is_eth_link_up() {}
+        debug!("USB Ethernet link up");
+    });
     // shell("$");
     init::initialize_app_cores();
     per_core_main()

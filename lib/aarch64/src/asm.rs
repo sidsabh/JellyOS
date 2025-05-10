@@ -84,3 +84,25 @@ macro_rules! svc {
         unsafe { asm!(concat!("svc ", stringify!($num))); }
     }
 }
+
+/// Enable (unmask) FIQ interrupts
+#[inline(always)]
+pub unsafe fn enable_fiq_interrupt() {
+    asm!("msr DAIFClr, 0b0001");
+}
+
+/// Disable (mask) FIQ interrupts
+#[inline(always)]
+pub unsafe fn disable_fiq_interrupt() {
+    asm!("msr DAIFSet, 0b0001");
+}
+
+#[inline(always)]
+pub unsafe fn with_fiq_enabled<F>(f: F)
+where
+    F: FnOnce(),
+{
+    enable_fiq_interrupt();
+    f();
+    disable_fiq_interrupt();
+}

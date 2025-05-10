@@ -138,7 +138,23 @@ impl phy::TxToken for TxToken {
 /// Creates and returns a new ethernet interface using `UsbEthernet` struct.
 pub fn create_interface() -> EthernetInterface<UsbEthernet> {
     // Lab 5 2.B
-    unimplemented!("create_interface")
+    // Finish create_interface() in kern/src/net.rs. You should use smoltcp’s EthernetInterfaceBuilder. 
+    // When creating the interface, use UsbEthernet as an inner physical device and MAC address obtained from USPi as Ethernet address of the interface:
+    let mac = USB.get_eth_addr();
+    debug!("MAC: {:?}", mac.0);
+    let usb_ethernet = UsbEthernet;
+    use smoltcp::wire::Ipv4Address;
+    let builder = EthernetInterfaceBuilder::new(usb_ethernet);
+    // Then, add an empty neighbor cache using BTreeMap. Finally, add two CIDR blocks as its IP addresses: 169.254.32.10/16 and 127.0.0.1/8. When you are done, implement EthernetDriver::new() using create_interface().
+    let neighbor_cache = NeighborCache::new(BTreeMap::new());
+    let ip_addr1 = IpCidr::new(IpAddress::from(Ipv4Address::new(169, 254, 32, 10)), 16);
+    let ip_addr2 = IpCidr::new(IpAddress::from(Ipv4Address::new(127, 0, 0, 1)), 8);
+    let ethernet = builder
+        .ethernet_addr(mac)
+        .neighbor_cache(neighbor_cache)
+        .ip_addrs(vec![ip_addr1, ip_addr2])
+        .finalize();
+    ethernet
 }
 
 const PORT_MAP_SIZE: usize = 65536 / 64;
@@ -156,7 +172,15 @@ impl EthernetDriver {
     /// Creates a fresh ethernet driver.
     fn new() -> EthernetDriver {
         // Lab 5 2.B
-        unimplemented!("new")
+        // When you are done, implement EthernetDriver::new() using create_interface().
+        let ethernet = create_interface();
+        let socket_set = SocketSet::new(vec![]);
+        let port_map = [0; PORT_MAP_SIZE];
+        EthernetDriver {
+            socket_set,
+            port_map,
+            ethernet,
+        }
     }
 
     /// Polls the ethernet interface.

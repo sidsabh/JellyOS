@@ -187,7 +187,10 @@ impl GlobalScheduler {
     /// # Lab 5
     /// Registers a timer handler with `Usb::start_kernel_timer` which will
     /// invoke `poll_ethernet` after 1 second.
-    pub fn initialize_global_timer_interrupt(&'static self) {}
+    pub fn initialize_global_timer_interrupt(&'static self) {
+        // use pi::interrupt::{Controller, Interrupt};
+        // Controller::new().enable(Interrupt::Timer1);
+    }
 
     /// Initializes the per-core local timer interrupt with `pi::local_interrupt`.
     /// The timer should be configured in a way that `CntpnsIrq` interrupt fires
