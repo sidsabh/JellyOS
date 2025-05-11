@@ -76,25 +76,6 @@ pub fn exit() -> ! {
     loop {}
 }
 
-// pub fn write(b: u8) {
-//     let mut ecode: u64;
-
-//     unsafe {
-//         asm!(
-//             "mov w0, {b:w}",
-//             "svc {nr_write}",
-//             "mov {ecode}, x7",
-//             b = in(reg) b,
-//             nr_write = const NR_WRITE,
-//             ecode = out(reg) ecode,
-//             out("x7") _,   // Clobbers x0
-//             options(nostack),
-//         );
-//     }
-
-//     let _ = OsError::from(ecode);
-// }
-
 pub fn write_str(msg: &str) {
     let mut ecode: u64;
     let mut printed_len: u64;
@@ -144,37 +125,6 @@ pub fn getpid() -> u64 {
 
     pid
 }
-
-pub fn sock_create() -> SocketDescriptor {
-    // Lab 5 2.D
-    unimplemented!("sock_create")
-}
-
-pub fn sock_status(descriptor: SocketDescriptor) -> OsResult<SocketStatus> {
-    // Lab 5 2.D
-    unimplemented!("sock_status")
-}
-
-pub fn sock_connect(descriptor: SocketDescriptor, addr: IpAddr) -> OsResult<()> {
-    // Lab 5 2.D
-    unimplemented!("sock_connect")
-}
-
-pub fn sock_listen(descriptor: SocketDescriptor, local_port: u16) -> OsResult<()> {
-    // Lab 5 2.D
-    unimplemented!("sock_listen")
-}
-
-pub fn sock_send(descriptor: SocketDescriptor, buf: &[u8]) -> OsResult<usize> {
-    // Lab 5 2.D
-    unimplemented!("sock_send")
-}
-
-pub fn sock_recv(descriptor: SocketDescriptor, buf: &mut [u8]) -> OsResult<usize> {
-    // Lab 5 2.D
-    unimplemented!("sock_recv")
-}
-
 
 pub fn write(fd: usize, buf: &[u8]) -> OsResult<usize> {
     let mut ecode: u64;
@@ -442,4 +392,159 @@ pub fn wait(pid: usize) -> OsResult<()> {
     }
 
     err_or!(ecode, ())
+}
+
+
+pub fn sock_create() -> SocketDescriptor {
+    
+    // Lab 5 2.D
+    let mut ecode: u64;
+    let mut sockfd: u64;
+
+    unsafe {
+        asm!(
+            "svc {nr_sock_create}",
+            "mov {sockfd}, x0",
+            "mov {ecode}, x7",
+            nr_sock_create = const NR_SOCK_CREATE,
+            sockfd = out(reg) sockfd,
+            ecode = out(reg) ecode,
+            out("x0") _,   // Clobbers x0
+            out("x7") _,   // Clobbers x7
+            options(nostack),
+        );
+    }
+
+    SocketDescriptor(sockfd)
+}
+
+pub fn sock_status(descriptor: SocketDescriptor) -> OsResult<SocketStatus> {
+    
+    let mut ecode: u64;
+    let mut is_active: u64;
+    let mut is_listening: u64;
+    let mut can_send: u64;
+    let mut can_recv: u64;
+
+    unsafe {
+        asm!(
+            "mov x0, {descriptor}",
+            "svc {nr_sock_status}",
+            "mov {is_active}, x0",
+            "mov {is_listening}, x1",
+            "mov {can_send}, x2",
+            "mov {can_recv}, x3",
+            "mov {ecode}, x7",
+            descriptor = in(reg) descriptor.0,
+            nr_sock_status = const NR_SOCK_STATUS,
+            is_active = out(reg) is_active,
+            is_listening = out(reg) is_listening,
+            can_send = out(reg) can_send,
+            can_recv = out(reg) can_recv,
+            ecode = out(reg) ecode,
+        );
+    }
+    let _ = OsError::from(ecode);
+    let is_active = is_active != 0;
+    let is_listening = is_listening != 0;
+    let can_send = can_send != 0;
+    let can_recv = can_recv != 0;
+    let status = SocketStatus {
+        is_active,
+        is_listening,
+        can_send,
+        can_recv,
+    };
+    Ok(status)
+
+}
+
+pub fn sock_connect(descriptor: SocketDescriptor, addr: IpAddr) -> OsResult<()> {
+    let mut ecode: u64;
+    unsafe {
+        asm!(
+            "mov x0, {descriptor}",
+            "mov x1, {addr:x}",
+            "mov x2, {port:x}",
+            "svc {nr_sock_connect}",
+            "mov {ecode}, x7",
+            descriptor = in(reg) descriptor.0,
+            addr = in(reg) addr.ip,
+            port = in(reg) addr.port,
+            nr_sock_connect = const NR_SOCK_CONNECT,
+            ecode = out(reg) ecode,
+            out("x7") _,   // Clobbers x7
+            options(nostack),
+        );
+    }
+    err_or!(ecode, ())
+}
+
+pub fn sock_listen(descriptor: SocketDescriptor, local_port: u16) -> OsResult<()> {
+    let mut ecode: u64;
+    unsafe {
+        asm!(
+            "mov x0, {descriptor}",
+            "mov x1, {local_port:x}",
+            "svc {nr_sock_listen}",
+            "mov {ecode}, x7",
+            descriptor = in(reg) descriptor.0,
+            local_port = in(reg) local_port,
+            nr_sock_listen = const NR_SOCK_LISTEN,
+            ecode = out(reg) ecode,
+            out("x7") _,   // Clobbers x7
+            options(nostack),
+        );
+    }
+    err_or!(ecode, ())
+}
+
+pub fn sock_send(descriptor: SocketDescriptor, buf: &[u8]) -> OsResult<usize> {
+    let mut ecode: u64;
+    let mut bytes_sent: u64;
+    unsafe {
+        asm!(
+            "mov x0, {descriptor}",
+            "mov x1, {buf_addr}",
+            "mov x2, {buf_len}",
+            "svc {nr_sock_send}",
+            "mov {bytes_sent}, x0",
+            "mov {ecode}, x7",
+            descriptor = in(reg) descriptor.0,
+            buf_addr = in(reg) buf.as_ptr(),
+            buf_len = in(reg) buf.len(),
+            nr_sock_send = const NR_SOCK_SEND,
+            bytes_sent = out(reg) bytes_sent,
+            ecode = out(reg) ecode,
+            out("x0") _,   // Clobbers x0
+            out("x7") _,   // Clobbers x7
+            options(nostack),
+        );
+    }
+    err_or!(ecode, bytes_sent as usize)
+}
+
+pub fn sock_recv(descriptor: SocketDescriptor, buf: &mut [u8]) -> OsResult<usize> {
+    let mut ecode: u64;
+    let mut bytes_received: u64;
+    unsafe {
+        asm!(
+            "mov x0, {descriptor}",
+            "mov x1, {buf_addr}",
+            "mov x2, {buf_len}",
+            "svc {nr_sock_recv}",
+            "mov {bytes_received}, x0",
+            "mov {ecode}, x7",
+            descriptor = in(reg) descriptor.0,
+            buf_addr = in(reg) buf.as_ptr(),
+            buf_len = in(reg) buf.len(),
+            nr_sock_recv = const NR_SOCK_RECV,
+            bytes_received = out(reg) bytes_received,
+            ecode = out(reg) ecode,
+            out("x0") _,   // Clobbers x0
+            out("x7") _,   // Clobbers x7
+            options(nostack),
+        );
+    }
+    err_or!(ecode, bytes_received as usize)
 }

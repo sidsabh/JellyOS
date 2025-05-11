@@ -53,7 +53,6 @@ static SCHEDULER: GlobalScheduler = GlobalScheduler::uninitialized();
 static VMM: VMManager = VMManager::uninitialized();
 static USB: Usb = Usb::uninitialized();
 static GLOBAL_IRQ: GlobalIrq = GlobalIrq::new();
-static IRQ: LocalIrq = LocalIrq::new();
 static FIQ: Fiq = Fiq::new();
 static ETHERNET: GlobalEthernetDriver = GlobalEthernetDriver::uninitialized();
 

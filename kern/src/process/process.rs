@@ -40,6 +40,7 @@ pub struct Process {
     pub files: Vec<Option<ProcessFile>>, // Open file table
     pub children: Vec<Arc<Mutex<ChildStatus>>>, // Child processes
     pub parent: Option<Arc<Mutex<ChildStatus>>>, // Parent process
+    pub sockets: Vec<SocketHandle>
 }
 use kernel_api::{OsResult, OsError};
 use heap::align_down;
@@ -84,7 +85,8 @@ impl Process {
             state,
             files,
             children: Vec::new(),
-            parent
+            parent,
+            sockets: Vec::new()
         };
 
         Ok(p)
@@ -346,7 +348,8 @@ impl Clone for Process {
             state: State::Ready,
             files : self.files.clone(),
             children: Vec::new(),
-            parent: None
+            parent: None,
+            sockets: self.sockets.clone()
         }
     }
 }

@@ -53,7 +53,7 @@ impl<T> Mutex<T> {
             }
         } else {
             /* --------- very‑early boot: single core only -------- */
-            debug_assert_eq!(aarch64::affinity(), 0);
+            assert!(aarch64::affinity() == 0, "Mutex::try_lock() called on non-zero CPU during early boot");
             let held_by_me = self.owner.load(Ordering::Relaxed) == 0;
 
             if !self.lock.load(Ordering::Relaxed) || held_by_me {

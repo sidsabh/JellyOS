@@ -17,7 +17,7 @@ use crate::traps::irq::IrqHandlerRegistry;
 use crate::{ALLOCATOR, FIQ, GLOBAL_IRQ};
 
 
-const DEBUG_USPI: bool = true; // define as false when not networking
+const DEBUG_USPI: bool = false; // Set to true to enable debug for networking
 pub macro uspi_trace {
     () => (if DEBUG_USPI { debug!("\n") } ),
     ($fmt:expr) => (if DEBUG_USPI { debug!(concat!($fmt, "\n")) }),

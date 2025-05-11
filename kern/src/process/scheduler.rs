@@ -1,14 +1,17 @@
 use aarch64::*;
 use alloc::boxed::Box;
 use alloc::collections::vec_deque::VecDeque;
+use pi::timer;
 use core::arch::asm;
 use core::ffi::c_void;
 use core::fmt;
+use core::time::Duration;
 use core::u64;
 use pi::local_interrupt::LocalInterrupt;
 
 use crate::mutex::Mutex;
 use crate::net::uspi::TKernelTimerHandle;
+use crate::percore::local_irq;
 use crate::process::{Id, Process, State};
 use crate::traps::irq::IrqHandlerRegistry;
 use crate::traps::TrapFrame;
@@ -190,6 +193,11 @@ impl GlobalScheduler {
     pub fn initialize_global_timer_interrupt(&'static self) {
         // use pi::interrupt::{Controller, Interrupt};
         // Controller::new().enable(Interrupt::Timer1);
+        USB.start_kernel_timer(
+            Duration::from_millis(1000),
+            Some(poll_ethernet),
+        );
+
     }
 
     /// Initializes the per-core local timer interrupt with `pi::local_interrupt`.
@@ -197,9 +205,7 @@ impl GlobalScheduler {
     /// every `TICK` duration, which is defined in `param.rs`.
     pub fn initialize_local_timer_interrupt(&'static self) {
         // Lab 5 2.C
-        use crate::IRQ;
-        use pi::interrupt::Interrupt;
-        IRQ.register(
+        local_irq().register(
             LocalInterrupt::CntPnsIrq,
             Box::new(|tf: &mut TrapFrame| {
                 trace!("Timer interrupt on core {}", aarch64::affinity());
@@ -229,8 +235,16 @@ impl GlobalScheduler {
 /// Poll the ethernet driver and re-register a timer handler using
 /// `Usb::start_kernel_timer`.
 extern "C" fn poll_ethernet(_: TKernelTimerHandle, _: *mut c_void, _: *mut c_void) {
-    // Lab 5 2.B
-    unimplemented!("poll_ethernet")
+    trace!("Polling ethernet driver");
+    use smoltcp::time::Instant;
+    let mut now = Instant::from_millis(timer::current_time().as_millis() as i64);
+    trace!("now: {:?}", now);
+    ETHERNET.poll(now);
+    now = Instant::from_millis(timer::current_time().as_millis() as i64);
+    trace!("now: {:?}", now);
+    let delay = ETHERNET.poll_delay(now);
+    trace!("Delay: {:?}", delay);
+    USB.start_kernel_timer(delay, Some(poll_ethernet));
 }
 
 /// Internal scheduler struct which is not thread-safe.
@@ -321,6 +335,7 @@ impl Scheduler {
                 p.state = State::Dead;
                 let rproc = self.processes.remove(i).unwrap();
                 let pid = rproc.context.tpidr;
+                self.release_process_resources(tf);
                 drop(rproc); // Explicitly drop the process instance
                 return Some(pid);
             }
@@ -330,8 +345,34 @@ impl Scheduler {
 
     /// Releases all process resources held by the current process such as sockets.
     fn release_process_resources(&mut self, tf: &mut TrapFrame) {
-        // Lab 5 2.C
-        unimplemented!("release_process_resources")
+
+        // NETWORK
+        use core::mem;
+
+        let process = self
+            .processes
+            .iter_mut()
+            .find(|p| p.context.tpidr == tf.tpidr)
+            .expect("No running process found");
+
+        let sockets = mem::take(&mut process.sockets);
+
+        for handle in sockets {
+            ETHERNET.critical(|eth| {
+                let port = {
+                    let mut sock = eth.get_socket(handle);
+                    let endpoint = sock.local_endpoint().port;
+                    if sock.is_open() {
+                        sock.close();
+                    }
+                    endpoint
+                };
+                eth.erase_port(port);
+                eth.release(handle);
+            });
+        }
+
+        ETHERNET.critical(|eth| eth.prune());
     }
 
     /// Finds a process corresponding with tpidr saved in a trap frame.

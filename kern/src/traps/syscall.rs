@@ -1,8 +1,9 @@
 use aarch64::{affinity, current_el};
 use alloc::boxed::{self, Box};
-use fat32::traits::FileSystem;
 use core::hint::spin_loop;
+use core::net::Ipv4Addr;
 use core::time::Duration;
+use fat32::traits::FileSystem;
 
 use smoltcp::wire::{IpAddress, IpEndpoint};
 
@@ -12,9 +13,72 @@ use crate::process::{GlobalScheduler, State};
 use crate::traps::TrapFrame;
 use crate::{ETHERNET, SCHEDULER};
 
-
 use kernel_api::*;
 use pi::timer;
+use smoltcp::wire::Ipv4Address;
+pub fn handle_syscall(num: u16, tf: &mut TrapFrame) {
+    match num as usize {
+        NR_SLEEP => sys_sleep(tf.regs[0] as u32, tf),
+        NR_TIME => sys_time(tf),
+        NR_EXIT => sys_exit(tf),
+        NR_GETPID => sys_getpid(tf),
+        NR_WRITE_STR => sys_write_str(tf.regs[0] as usize, tf.regs[1] as usize, tf),
+        NR_OPEN => sys_open(tf.regs[0] as usize, tf),
+        NR_CLOSE => sys_close(tf.regs[0] as usize, tf),
+        NR_READ => sys_read(
+            tf.regs[0] as usize,
+            tf.regs[1] as usize,
+            tf.regs[2] as usize,
+            tf,
+        ),
+        NR_WRITE => sys_write(
+            tf.regs[0] as usize,
+            tf.regs[1] as usize,
+            tf.regs[2] as usize,
+            tf,
+        ),
+        NR_SEEK => sys_seek(tf.regs[0] as usize, tf.regs[1] as usize, tf),
+        NR_LEN => sys_len(tf.regs[0] as usize, tf),
+        NR_READDIR => sys_readdir(
+            tf.regs[0] as usize,
+            tf.regs[1] as usize,
+            tf.regs[2] as usize,
+            tf,
+        ),
+        NR_EXEC => sys_exec(tf.regs[0] as usize, tf),
+        NR_FORK => sys_fork(tf),
+        NR_WAITPID => sys_wait(tf, tf.regs[0] as usize),
+        NR_SOCK_CREATE => sys_sock_create(tf),
+        NR_SOCK_STATUS => sys_sock_status(tf.regs[0] as usize, tf),
+        NR_SOCK_CONNECT => sys_sock_connect(
+            tf.regs[0] as usize,
+            IpEndpoint {
+                addr: IpAddress::Ipv4(Ipv4Address::new(
+                    (tf.regs[1] >> 24) as u8,
+                    (tf.regs[1] >> 16) as u8,
+                    (tf.regs[1] >> 8) as u8,
+                    tf.regs[1] as u8,
+                )),
+                port: tf.regs[2] as u16,
+            },
+            tf,
+        ),
+        NR_SOCK_LISTEN => sys_sock_listen(tf.regs[0] as usize, tf.regs[1] as u16, tf),
+        NR_SOCK_SEND => sys_sock_send(
+            tf.regs[0] as usize,
+            tf.regs[1] as usize,
+            tf.regs[2] as usize,
+            tf,
+        ),
+        NR_SOCK_RECV => sys_sock_recv(
+            tf.regs[0] as usize,
+            tf.regs[1] as usize,
+            tf.regs[2] as usize,
+            tf,
+        ),
+        _ => panic!("unimplemented syscall: {}", num),
+    }
+}
 
 /// Sleep for `ms` milliseconds.
 ///
@@ -26,16 +90,25 @@ use pi::timer;
 pub fn sys_sleep(ms: u32, tf: &mut TrapFrame) {
     trace!("Core {} is running sleep", affinity());
     let start = timer::current_time();
-    let desired_time = timer::current_time()+Duration::from_millis(ms as u64);
-    trace!("Process {}: Sleeping for {} ms, start: {:?}, desired: {:?}\n", tf.tpidr, ms, start, desired_time);
+    let desired_time = timer::current_time() + Duration::from_millis(ms as u64);
+    trace!(
+        "Process {}: Sleeping for {} ms, start: {:?}, desired: {:?}\n",
+        tf.tpidr,
+        ms,
+        start,
+        desired_time
+    );
     let boxed_fnmut = Box::new(move |process: &mut crate::process::Process| {
-        
         let res = timer::current_time() >= desired_time;
         if res {
             let tf = &mut process.context;
             tf.regs[0] = (timer::current_time() - start).as_millis() as u64;
             tf.regs[7] = 1;
-            debug!("Process {}: Woke up, current time: {:?}", tf.tpidr, timer::current_time());
+            debug!(
+                "Process {}: Woke up, current time: {:?}",
+                tf.tpidr,
+                timer::current_time()
+            );
         }
 
         res
@@ -63,9 +136,7 @@ pub fn sys_time(tf: &mut TrapFrame) {
 /// This system call does not take paramer and does not return any value.
 pub fn sys_exit(tf: &mut TrapFrame) {
     // get parent_semaphore
-    let parent_semaphore = SCHEDULER.with_current_process_mut(tf, |process| {
-         process.parent.clone()
-    });
+    let parent_semaphore = SCHEDULER.with_current_process_mut(tf, |process| process.parent.clone());
     if let Some(parent_semaphore) = parent_semaphore {
         // set parent semaphore
         let mut g = parent_semaphore.lock();
@@ -78,18 +149,6 @@ pub fn sys_exit(tf: &mut TrapFrame) {
     assert!(id == tf.tpidr);
     GlobalScheduler::idle_thread();
 }
-
-/// Writes to console.
-///
-/// This system call takes one parameter: a u8 character to print.
-///
-/// It only returns the usual status value.
-// pub fn sys_write(b: u8, tf: &mut TrapFrame) {
-//     let mut console = CONSOLE.lock();
-//     use shim::io::Write;
-//     console.write(&mut[b]).expect("write failed");
-//     tf.regs[7] = 1;
-// }
 
 /// Returns the current process's ID.
 ///
@@ -157,151 +216,11 @@ pub fn sys_write_str(va: usize, len: usize, tf: &mut TrapFrame) {
         }
     }
 }
-/// Sends data with a connected socket.
-///
-/// This system call takes a socket descriptor as the first parameter, the
-/// address of the buffer as the second parameter, and the length of the buffer
-/// as the third parameter.
-///
-/// In addition to the usual status value, this system call returns one
-/// parameter: the number of bytes sent.
-///
-/// # Errors
-/// This function can return following errors:
-///
-/// - `OsError::InvalidSocket`: Cannot find a socket that corresponds to the provided descriptor.
-/// - `OsError::BadAddress`: The address and the length pair does not form a valid userspace slice.
-/// - `OsError::IllegalSocketOperation`: `send_slice()` returned `smoltcp::Error::Illegal`.
-/// - `OsError::Unknown`: All the other errors from smoltcp.
-pub fn sys_sock_send(sock_idx: usize, va: usize, len: usize, tf: &mut TrapFrame) {
-    // Lab 5 2.D
-    unimplemented!("sys_sock_send")
-}
 
-/// Receives data from a connected socket.
-///
-/// This system call takes a socket descriptor as the first parameter, the
-/// address of the buffer as the second parameter, and the length of the buffer
-/// as the third parameter.
-///
-/// In addition to the usual status value, this system call returns one
-/// parameter: the number of bytes read.
-///
-/// # Errors
-/// This function can return following errors:
-///
-/// - `OsError::InvalidSocket`: Cannot find a socket that corresponds to the provided descriptor.
-/// - `OsError::BadAddress`: The address and the length pair does not form a valid userspace slice.
-/// - `OsError::IllegalSocketOperation`: `recv_slice()` returned `smoltcp::Error::Illegal`.
-/// - `OsError::Unknown`: All the other errors from smoltcp.
-pub fn sys_sock_recv(sock_idx: usize, va: usize, len: usize, tf: &mut TrapFrame) {
-    // Lab 5 2.D
-    unimplemented!("sys_sock_recv")
-}
-
-/// socket list.
-///
-/// This function does neither take any parameter nor return anything,
-/// except the usual return code that indicates successful syscall execution.
-pub fn sys_sock_create(tf: &mut TrapFrame) {
-    // Lab 5 2.D
-    unimplemented!("sys_sock_create")
-}
-
-/// Returns the status of a socket.
-///
-/// This system call takes a socket descriptor as the first parameter.
-///
-/// In addition to the usual status value, this system call returns four boolean
-/// values that describes the status of the queried socket.
-///
-/// - x0: is_active
-/// - x1: is_listening
-/// - x2: can_send
-/// - x3: can_recv
-///
-/// # Errors
-/// This function returns `OsError::InvalidSocket` if a socket that corresponds
-/// to the provided descriptor is not found.
-pub fn sys_sock_status(sock_idx: usize, tf: &mut TrapFrame) {
-    // Lab 5 2.D
-    unimplemented!("sys_sock_status")
-}
-
-/// Connects a local ephemeral port to a remote IP endpoint with a socket.
-///
-/// This system call takes a socket descriptor as the first parameter, the IP
-/// of the remote endpoint as the second paramter in big endian, and the port
-/// number of the remote endpoint as the third parameter.
-///
-/// `handle_syscall` should read the value of registers and create a struct that
-/// implements `Into<IpEndpoint>` when calling this function.
-///
-/// It only returns the usual status value.
-///
-/// # Errors
-/// This function can return following errors:
-///
-/// - `OsError::NoEntry`: Fails to allocate an ephemeral port
-/// - `OsError::InvalidSocket`: Cannot find a socket that corresponds to the provided descriptor.
-/// - `OsError::IllegalSocketOperation`: `connect()` returned `smoltcp::Error::Illegal`.
-/// - `OsError::BadAddress`: `connect()` returned `smoltcp::Error::Unaddressable`.
-/// - `OsError::Unknown`: All the other errors from calling `connect()`.
-pub fn sys_sock_connect(
-    sock_idx: usize,
-    remote_endpoint: impl Into<IpEndpoint>,
-    tf: &mut TrapFrame,
-) {
-    // Lab 5 2.D
-    unimplemented!("sys_sock_connect")
-}
-
-/// Listens on a local port for an inbound connection.
-///
-/// This system call takes a socket descriptor as the first parameter and the
-/// local ports to listen on as the second parameter.
-///
-/// It only returns the usual status value.
-///
-/// # Errors
-/// This function can return following errors:
-///
-/// - `OsError::InvalidSocket`: Cannot find a socket that corresponds to the provided descriptor.
-/// - `OsError::IllegalSocketOperation`: `listen()` returned `smoltcp::Error::Illegal`.
-/// - `OsError::BadAddress`: `listen()` returned `smoltcp::Error::Unaddressable`.
-/// - `OsError::Unknown`: All the other errors from calling `listen()`.
-pub fn sys_sock_listen(sock_idx: usize, local_port: u16, tf: &mut TrapFrame) {
-    // Lab 5 2.D
-    unimplemented!("sys_sock_listen")
-}
-
-
-pub fn handle_syscall(num: u16, tf: &mut TrapFrame) {
-    match num as usize {
-        NR_SLEEP => sys_sleep(tf.regs[0] as u32, tf),
-        NR_TIME => sys_time(tf),
-        NR_EXIT => sys_exit(tf),
-        NR_GETPID => sys_getpid(tf),
-        NR_WRITE_STR => sys_write_str(tf.regs[0] as usize, tf.regs[1] as usize, tf),
-        NR_OPEN => sys_open(tf.regs[0] as usize, tf),
-        NR_CLOSE => sys_close(tf.regs[0] as usize, tf),
-        NR_READ => sys_read(tf.regs[0] as usize, tf.regs[1] as usize, tf.regs[2] as usize, tf),
-        NR_WRITE => sys_write(tf.regs[0] as usize, tf.regs[1] as usize, tf.regs[2] as usize, tf),
-        NR_SEEK => sys_seek(tf.regs[0] as usize, tf.regs[1] as usize, tf),
-        NR_LEN => sys_len(tf.regs[0] as usize, tf),
-        NR_READDIR => sys_readdir(tf.regs[0] as usize, tf.regs[1] as usize, tf.regs[2] as usize, tf),
-        NR_EXEC => sys_exec(tf.regs[0] as usize, tf),
-        NR_FORK => sys_fork(tf),
-        NR_WAITPID => sys_wait(tf, tf.regs[0] as usize),
-        _ => panic!("unimplemented syscall: {}", num),
-    }
-}
-
-use alloc::sync::Arc;
 use crate::mutex::Mutex;
 use crate::process::ChildStatus;
+use alloc::sync::Arc;
 pub fn sys_open(va: usize, tf: &mut TrapFrame) {
-
     let path = match unsafe { to_user_slice(va, 256) } {
         Ok(slice) => {
             let s = core::str::from_utf8(slice.split(|&c| c == 0).next().unwrap_or(&[]))
@@ -349,9 +268,6 @@ pub fn sys_open(va: usize, tf: &mut TrapFrame) {
     }
 }
 
-
-
-
 pub fn sys_close(fd: usize, tf: &mut TrapFrame) {
     let result = SCHEDULER.with_current_process_mut(tf, |process| {
         if fd >= process.files.len() || process.files[fd].is_none() {
@@ -363,7 +279,6 @@ pub fn sys_close(fd: usize, tf: &mut TrapFrame) {
 
     tf.regs[7] = result;
 }
-
 
 pub fn sys_read(fd: usize, va: usize, len: usize, tf: &mut TrapFrame) {
     let (result, bytes_read) = SCHEDULER.with_current_process_mut(tf, |process| {
@@ -378,15 +293,14 @@ pub fn sys_read(fd: usize, va: usize, len: usize, tf: &mut TrapFrame) {
         let y = process.files[fd].as_mut().unwrap();
         let handle = y.handle.clone(); // Clone the Arc (increases reference count)
         let res = handle.lock().read(buf);
-        
+
         match res {
             Ok(bytes) => (OsError::Ok as u64, bytes),
             Err(_) => (OsError::IoError as u64, 0),
         }
-        
     });
 
-    tf.regs[0] = bytes_read as u64;  // Set the return value **after** the closure
+    tf.regs[0] = bytes_read as u64; // Set the return value **after** the closure
     tf.regs[7] = result;
 }
 
@@ -401,7 +315,6 @@ pub fn sys_write(fd: usize, va: usize, len: usize, tf: &mut TrapFrame) {
             Err(_) => return (OsError::BadAddress as u64, 0),
         };
 
-        
         let y = process.files[fd].as_mut().unwrap();
         let handle = y.handle.clone(); // Clone the Arc (increases reference count)
         let res = handle.lock().write(buf);
@@ -414,7 +327,6 @@ pub fn sys_write(fd: usize, va: usize, len: usize, tf: &mut TrapFrame) {
     tf.regs[0] = bytes_written as u64;
     tf.regs[7] = result;
 }
-
 
 pub fn sys_seek(fd: usize, offset: usize, tf: &mut TrapFrame) {
     let result = SCHEDULER.with_current_process_mut(tf, |process| {
@@ -434,7 +346,6 @@ pub fn sys_seek(fd: usize, offset: usize, tf: &mut TrapFrame) {
     tf.regs[7] = result;
 }
 
-
 pub fn sys_len(fd: usize, tf: &mut TrapFrame) {
     let (result, size) = SCHEDULER.with_current_process_mut(tf, |process| {
         if fd >= process.files.len() || process.files[fd].is_none() {
@@ -452,7 +363,6 @@ pub fn sys_len(fd: usize, tf: &mut TrapFrame) {
 }
 
 pub fn sys_readdir(fd: usize, user_buf: usize, buf_len: usize, tf: &mut TrapFrame) {
-
     let (result, bytes_read) = SCHEDULER.with_current_process_mut(tf, |process| {
         if fd >= process.files.len() || process.files[fd].is_none() {
             return (OsError::InvalidFile as u64, 0);
@@ -473,21 +383,14 @@ pub fn sys_readdir(fd: usize, user_buf: usize, buf_len: usize, tf: &mut TrapFram
             }
         };
 
-
         // Read directory entries into user buffer
         let y = process.files[fd].as_mut().unwrap();
         let handle = y.handle.clone();
         let res = handle.lock().readdir(user_buffer);
         match res {
-            Ok(bytes) if bytes > 0 => {
-                (OsError::Ok as u64, bytes)
-            }
-            Ok(_) => {
-                (OsError::IoErrorEof as u64, 0)
-            }
-            Err(_) => {
-                (OsError::InvalidDirectory as u64, 0)
-            }
+            Ok(bytes) if bytes > 0 => (OsError::Ok as u64, bytes),
+            Ok(_) => (OsError::IoErrorEof as u64, 0),
+            Err(_) => (OsError::InvalidDirectory as u64, 0),
         }
     });
 
@@ -530,17 +433,22 @@ pub fn sys_exec(va: usize, tf: &mut TrapFrame) {
             for i in 0..argc {
                 let start = 8 + i * 8;
                 let end = start + 8;
-                if end > argv_slice.len() { break; }
-                let ptr_bytes: [u8;8] = argv_slice[start..end].try_into().unwrap();
+                if end > argv_slice.len() {
+                    break;
+                }
+                let ptr_bytes: [u8; 8] = argv_slice[start..end].try_into().unwrap();
                 let arg_ptr = u64::from_ne_bytes(ptr_bytes) as *const u8;
-                if arg_ptr.is_null() { break; }
+                if arg_ptr.is_null() {
+                    break;
+                }
                 // Read the null-terminated string from user memory.
                 let arg_str = unsafe {
                     let mut len = 0;
                     while core::ptr::read(arg_ptr.add(len)) != 0 {
                         len += 1;
                     }
-                    core::str::from_utf8(core::slice::from_raw_parts(arg_ptr, len)).unwrap_or("[Invalid UTF-8]")
+                    core::str::from_utf8(core::slice::from_raw_parts(arg_ptr, len))
+                        .unwrap_or("[Invalid UTF-8]")
                 };
                 // move to heap then push
                 use crate::alloc::string::ToString;
@@ -562,13 +470,12 @@ pub fn sys_exec(va: usize, tf: &mut TrapFrame) {
         }
     });
 
-
     trace!("[sys_exec] tf: {:#x?}", new_tf);
     match new_tf {
         Some(context) => {
             debug!("[sys_exec] Switching to user mode at {:#x}", context.pc);
             *tf = context; // Update the trap frame
-            // TLB flush happens before eret
+                           // TLB flush happens before eret
         }
         None => {
             trace!("[sys_exec] ERROR: execve() failed!");
@@ -576,8 +483,6 @@ pub fn sys_exec(va: usize, tf: &mut TrapFrame) {
         }
     }
 }
-
-
 
 pub fn sys_fork(tf: &mut TrapFrame) {
     trace!("[sys_fork] Forking process...");
@@ -588,35 +493,30 @@ pub fn sys_fork(tf: &mut TrapFrame) {
         parent.children.push(child_fut.clone());
         parent.clone()
     });
-    
 
     new_proc.state = State::Ready;
     *new_proc.context = *tf; // Updated frame
-    // print tf:
+                             // print tf:
     new_proc.context.regs[0] = 0; // Child returns 0
     new_proc.context.ttbr1_el1 = new_proc.vmap.get_baddr().as_u64();
     new_proc.parent = Some(child_fut.clone());
 
-        
     let id = SCHEDULER.add(new_proc); // Add the new process to the scheduler
-
 
     // Set the child process's PID
     {
         let mut g = child_fut.lock();
         g.pid = Some(id); // technically should be set before add , but whatever
     }
-    
+
     // // Parent returns child PID
     tf.regs[0] = id as u64;
 }
 
-
 pub fn sys_wait(tf: &mut TrapFrame, pid: usize) {
-
     let boxed_fnmut = Box::new(move |process: &mut crate::process::Process| {
         let mut child = None;
-        let mut child_done : bool = false;
+        let mut child_done: bool = false;
         for c in process.children.iter() {
             let g = c.lock();
             if g.pid == Some(pid as u64) {
@@ -641,3 +541,281 @@ pub fn sys_wait(tf: &mut TrapFrame, pid: usize) {
 
     SCHEDULER.block(State::Waiting(Some(boxed_fnmut)), tf);
 }
+
+/// socket list.
+///
+pub fn sys_sock_create(tf: &mut TrapFrame) {
+    let handle = ETHERNET.add_socket();
+    SCHEDULER.with_current_process_mut(tf, |process| {
+        process.sockets.push(handle);
+        process.context.regs[0] = process.sockets.len() as u64 - 1;
+    });
+    tf.regs[7] = OsError::Ok as u64;
+    trace!("Socket created: {}", tf.regs[0]);
+}
+
+use smoltcp::socket::SocketHandle;
+
+/// Returns the status of a socket.
+///
+/// This system call takes a socket descriptor as the first parameter.
+///
+/// In addition to the usual status value, this system call returns four boolean
+/// values that describes the status of the queried socket.
+///
+/// - x0: is_active
+/// - x1: is_listening
+/// - x2: can_send
+/// - x3: can_recv
+///
+/// # Errors
+/// This function returns `OsError::InvalidSocket` if a socket that corresponds
+/// to the provided descriptor is not found.
+pub fn sys_sock_status(sock_idx: usize, tf: &mut TrapFrame) {
+    let socket_handle: Option<SocketHandle> = SCHEDULER.with_current_process_mut(tf, |process| {
+        if sock_idx >= process.sockets.len() {
+            return None;
+        }
+        Some(process.sockets[sock_idx])
+    });
+
+    if socket_handle.is_none() {
+        tf.regs[7] = OsError::InvalidSocket as u64;
+        return;
+    }
+
+    let socket = socket_handle.unwrap();
+    let status = ETHERNET.with_socket(socket, |s| {
+        let is_active = s.is_active();
+        let is_listening = s.is_listening();
+        let can_send = s.can_send();
+        let can_recv = s.can_recv();
+        (is_active, is_listening, can_send, can_recv)
+    });
+    tf.regs[0] = status.0 as u64;
+    tf.regs[1] = status.1 as u64;
+    tf.regs[2] = status.2 as u64;
+    tf.regs[3] = status.3 as u64;
+}
+
+
+/// Connects a local ephemeral port to a remote IP endpoint with a socket.
+///
+/// This system call takes a socket descriptor as the first parameter, the IP
+/// of the remote endpoint as the second paramter in big endian, and the port
+/// number of the remote endpoint as the third parameter.
+///
+/// `handle_syscall` should read the value of registers and create a struct that
+/// implements `Into<IpEndpoint>` when calling this function.
+///
+/// It only returns the usual status value.
+///
+/// # Errors
+/// This function can return following errors:
+///
+/// - `OsError::NoEntry`: Fails to allocate an ephemeral port
+/// - `OsError::InvalidSocket`: Cannot find a socket that corresponds to the provided descriptor.
+/// - `OsError::IllegalSocketOperation`: `connect()` returned `smoltcp::Error::Illegal`.
+/// - `OsError::BadAddress`: `connect()` returned `smoltcp::Error::Unaddressable`.
+/// - `OsError::Unknown`: All the other errors from calling `connect()`.
+pub fn sys_sock_connect(
+    sock_idx: usize,
+    remote_endpoint: impl Into<IpEndpoint>,
+    tf: &mut TrapFrame,
+) {
+    
+    let socket_handle: Option<SocketHandle> = SCHEDULER.with_current_process_mut(tf, |process| {
+        if sock_idx >= process.sockets.len() {
+            return None;
+        }
+        Some(process.sockets[sock_idx])
+    });
+
+    if socket_handle.is_none() {
+        tf.regs[7] = OsError::InvalidSocket as u64;
+        return;
+    }
+
+    let socket = socket_handle.unwrap();
+
+    let local_port = ETHERNET.get_ephemeral_port();
+    if local_port.is_none() {
+        tf.regs[7] = OsError::NoEntry as u64;
+        return;
+    }
+    let local_port = local_port.unwrap();
+    let local_endpoint = IpEndpoint {
+        addr: IpAddress::from(Ipv4Address::new(169, 254, 32, 10)),
+        port: local_port,
+    };
+    
+    let result = ETHERNET.with_socket(socket, |s| {
+        s.connect(local_endpoint, remote_endpoint)
+    });
+
+    match result {
+        Ok(_) => {
+            tf.regs[7] = OsError::Ok as u64;
+            ETHERNET.mark_port(local_port);
+        }
+        Err(e) => {
+            tf.regs[7] = e as u64;
+        }
+    }
+    trace!("Socket connected: {}", tf.regs[0]);
+}
+
+
+/// Listens on a local port for an inbound connection.
+///
+/// This system call takes a socket descriptor as the first parameter and the
+/// local ports to listen on as the second parameter.
+///
+/// It only returns the usual status value.
+///
+/// # Errors
+/// This function can return following errors:
+///
+/// - `OsError::InvalidSocket`: Cannot find a socket that corresponds to the provided descriptor.
+/// - `OsError::IllegalSocketOperation`: `listen()` returned `smoltcp::Error::Illegal`.
+/// - `OsError::BadAddress`: `listen()` returned `smoltcp::Error::Unaddressable`.
+/// - `OsError::Unknown`: All the other errors from calling `listen()`.
+pub fn sys_sock_listen(sock_idx: usize, local_port: u16, tf: &mut TrapFrame) {
+    let socket_handle: Option<SocketHandle> = SCHEDULER.with_current_process_mut(tf, |process| {
+        if sock_idx >= process.sockets.len() {
+            return None;
+        }
+        Some(process.sockets[sock_idx])
+    });
+
+    if socket_handle.is_none() {
+        tf.regs[7] = OsError::InvalidSocket as u64;
+        return;
+    }
+
+    let socket = socket_handle.unwrap();
+
+    let result = ETHERNET.with_socket(socket, |s| s.listen(local_port));
+
+    match result {
+        Ok(_) => {
+            tf.regs[7] = OsError::Ok as u64;
+            ETHERNET.mark_port(local_port);
+        }
+        Err(e) => {
+            tf.regs[7] = e as u64;
+        }
+    }
+    trace!("Socket listening: {}", tf.regs[0]);
+}
+
+
+/// Sends data with a connected socket.
+///
+/// This system call takes a socket descriptor as the first parameter, the
+/// address of the buffer as the second parameter, and the length of the buffer
+/// as the third parameter.
+///
+/// In addition to the usual status value, this system call returns one
+/// parameter: the number of bytes sent.
+///
+/// # Errors
+/// This function can return following errors:
+///
+/// - `OsError::InvalidSocket`: Cannot find a socket that corresponds to the provided descriptor.
+/// - `OsError::BadAddress`: The address and the length pair does not form a valid userspace slice.
+/// - `OsError::IllegalSocketOperation`: `send_slice()` returned `smoltcp::Error::Illegal`.
+/// - `OsError::Unknown`: All the other errors from smoltcp.
+pub fn sys_sock_send(sock_idx: usize, va: usize, len: usize, tf: &mut TrapFrame) {
+    
+    let socket_handle: Option<SocketHandle> = SCHEDULER.with_current_process_mut(tf, |process| {
+        if sock_idx >= process.sockets.len() {
+            return None;
+        }
+        Some(process.sockets[sock_idx])
+    });
+
+    if socket_handle.is_none() {
+        tf.regs[7] = OsError::InvalidSocket as u64;
+        return;
+    }
+
+    let socket = socket_handle.unwrap();
+
+    // use to_user_slice(va, len) for the buffer
+    let buf = match unsafe { to_user_slice(va, len) } {
+        Ok(slice) => slice,
+        Err(_) => {
+            tf.regs[7] = OsError::BadAddress as u64;
+            return;
+        }
+    };
+
+    let result = ETHERNET.with_socket(socket, |s| s.send_slice(buf));
+    match result {
+        Ok(bytes) => {
+            tf.regs[0] = bytes as u64;
+            tf.regs[7] = OsError::Ok as u64;
+        }
+        Err(e) => {
+            tf.regs[7] = e as u64;
+        }
+    }
+    trace!("Socket sent: {}", tf.regs[0]);
+
+}
+
+/// Receives data from a connected socket.
+///
+/// This system call takes a socket descriptor as the first parameter, the
+/// address of the buffer as the second parameter, and the length of the buffer
+/// as the third parameter.
+///
+/// In addition to the usual status value, this system call returns one
+/// parameter: the number of bytes read.
+///
+/// # Errors
+/// This function can return following errors:
+///
+/// - `OsError::InvalidSocket`: Cannot find a socket that corresponds to the provided descriptor.
+/// - `OsError::BadAddress`: The address and the length pair does not form a valid userspace slice.
+/// - `OsError::IllegalSocketOperation`: `recv_slice()` returned `smoltcp::Error::Illegal`.
+/// - `OsError::Unknown`: All the other errors from smoltcp.
+pub fn sys_sock_recv(sock_idx: usize, va: usize, len: usize, tf: &mut TrapFrame) {
+    let socket_handle: Option<SocketHandle> = SCHEDULER.with_current_process_mut(tf, |process| {
+        if sock_idx >= process.sockets.len() {
+            return None;
+        }
+        Some(process.sockets[sock_idx])
+    });
+
+    if socket_handle.is_none() {
+        tf.regs[7] = OsError::InvalidSocket as u64;
+        return;
+    }
+
+    let socket = socket_handle.unwrap();
+
+    // use to_user_slice(va, len) for the buffer
+    let buf = match unsafe { to_user_slice_mut(va, len) } {
+        Ok(slice) => slice,
+        Err(_) => {
+            tf.regs[7] = OsError::BadAddress as u64;
+            return;
+        }
+    };
+
+    let result = ETHERNET.with_socket(socket, |s| s.recv_slice(buf));
+    match result {
+        Ok(bytes) => {
+            tf.regs[0] = bytes as u64;
+            tf.regs[7] = OsError::Ok as u64;
+        }
+        Err(e) => {
+            tf.regs[7] = e as u64;
+        }
+    }
+    trace!("Socket received: {}", tf.regs[0]);
+}
+
+

@@ -15,7 +15,7 @@ use pi::local_interrupt::{LocalController, LocalInterrupt};
 
 use self::syndrome::Syndrome;
 use self::syscall::handle_syscall;
-use crate::percore;
+use crate::percore::{self, local_irq};
 use crate::traps::irq::IrqHandlerRegistry;
 
 #[repr(u16)]
@@ -42,7 +42,6 @@ pub struct Info {
     source: Source,
     kind: Kind,
 }
-use crate::{shell, IRQ};
 /// This function is called when an exception occurs. The `info` parameter
 /// specifies the source and kind of exception that has occurred. The `esr` is
 /// the value of the exception syndrome register. Finally, `tf` is a pointer to
@@ -103,17 +102,20 @@ pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
             let mut handled = false;
 
             let global_controller = Controller::new();
-            // TODO: Fix
-            // if affinity() == 0 {
-            //     for i in Interrupt::iter() {
-            //         if global_controller.is_pending(i) {
-            //             // info!("{:#?}, idx:{:#?} ", info, i);
-            //             GLOBAL_IRQ.invoke(i, tf);
-            //             handled = true;
-            //             break;
-            //         }
-            //     }
-            // }
+            if affinity() == 0 {
+                // Only core 0 receives global interrupts: currently is only for software based polling that runs on top of Timer3
+                for i in Interrupt::iter() {
+                    if global_controller.is_pending(i) {
+                        unsafe {
+                            aarch64::with_fiq_enabled(|| {
+                                GLOBAL_IRQ.invoke(i, tf);
+                            });
+                        }
+                        handled = true;
+                        break;
+                    }
+                }
+            }
 
             if !handled {
                 let local_controller = LocalController::new(affinity());
@@ -122,7 +124,7 @@ pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
                         // debug!("{:#?}, idx:{:#?} ", info, i);
                         unsafe {
                             aarch64::with_fiq_enabled(|| {
-                                IRQ.invoke(i, tf);
+                                local_irq().invoke(i, tf);
                             });
                         }
                         handled = true;
@@ -136,7 +138,8 @@ pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
             }
         }
         Kind::Fiq => {
-            // Can only have one FIQ handler
+            assert!(affinity() == 0, "FIQ handler called on non-zero CPU");
+            // Can only have one FIQ handler: currently is only for USPI
             FIQ.invoke((), tf);
         }
         Kind::SError => {

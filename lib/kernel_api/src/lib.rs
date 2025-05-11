@@ -90,6 +90,13 @@ pub const NR_READDIR: usize = 12;
 pub const NR_EXEC: usize = 13;
 pub const NR_FORK: usize = 14;
 pub const NR_WAITPID: usize = 15;
+pub const NR_SOCK_CREATE: usize = 20;
+pub const NR_SOCK_STATUS: usize = 21;
+pub const NR_SOCK_CONNECT: usize = 22;
+pub const NR_SOCK_LISTEN: usize = 23;
+pub const NR_SOCK_SEND: usize = 24;
+pub const NR_SOCK_RECV: usize = 25;
+
 
 
 #[derive(Clone, Copy, Debug)]
@@ -144,10 +151,3 @@ impl fmt::Debug for IpAddr {
         )
     }
 }
-
-pub const NR_SOCK_CREATE: usize = 20;
-pub const NR_SOCK_STATUS: usize = 21;
-pub const NR_SOCK_CONNECT: usize = 22;
-pub const NR_SOCK_LISTEN: usize = 23;
-pub const NR_SOCK_SEND: usize = 24;
-pub const NR_SOCK_RECV: usize = 25;

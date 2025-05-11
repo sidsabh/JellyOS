@@ -1,10 +1,12 @@
 ///! Network device that wraps USPi in smoltcp abstraction
 pub mod uspi;
 
+use aarch64::affinity;
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
 use alloc::vec;
 use alloc::vec::Vec;
+use pi::timer::current_time;
 use core::convert::TryInto;
 use core::fmt;
 use core::time::Duration;
@@ -15,8 +17,10 @@ use smoltcp::socket::{SocketHandle, SocketRef, TcpSocketBuffer};
 use smoltcp::time::Instant;
 use smoltcp::wire::{IpAddress, IpCidr};
 
+use crate::console::kprint;
 use crate::mutex::Mutex;
 use crate::param::MTU;
+use crate::percore::get_preemptive_counter;
 use crate::USB;
 
 // We always use owned buffer as internal storage
@@ -141,7 +145,15 @@ pub fn create_interface() -> EthernetInterface<UsbEthernet> {
     // Finish create_interface() in kern/src/net.rs. You should use smoltcp’s EthernetInterfaceBuilder. 
     // When creating the interface, use UsbEthernet as an inner physical device and MAC address obtained from USPi as Ethernet address of the interface:
     let mac = USB.get_eth_addr();
-    debug!("MAC: {:?}", mac.0);
+    kprint!("USB MAC: ");
+    for (i, byte) in mac.0.iter().enumerate() {
+        if i != 0 {
+            kprint!(":");
+        }
+        // Print the MAC address in hex format
+        kprint!("{:02x}", byte);
+    }
+    kprint!("\n");
     let usb_ethernet = UsbEthernet;
     use smoltcp::wire::Ipv4Address;
     let builder = EthernetInterfaceBuilder::new(usb_ethernet);
@@ -186,34 +198,59 @@ impl EthernetDriver {
     /// Polls the ethernet interface.
     /// See also `smoltcp::iface::EthernetInterface::poll()`.
     fn poll(&mut self, timestamp: Instant) {
-        // Lab 5 2.B
-        unimplemented!("poll")
+        match self.ethernet.poll(&mut self.socket_set, timestamp) {
+            Ok(_) => {}
+            Err(e) => {
+                error!("Ethernet poll error: {:?}", e);
+            }
+        }
     }
 
     /// Returns an advisory wait time to call `poll()` the next time.
     /// See also `smoltcp::iface::EthernetInterface::poll_delay()`.
     fn poll_delay(&mut self, timestamp: Instant) -> Duration {
-        // Lab 5 2.B
-        unimplemented!("poll_delay")
+        if let Some(delay) = self.ethernet.poll_delay(&mut self.socket_set, timestamp) {
+            delay.into()
+        } else {
+            Duration::from_millis(10) // default delay?
+        }
     }
 
     /// Marks a port as used. Returns `Some(port)` on success, `None` on failure.
     pub fn mark_port(&mut self, port: u16) -> Option<u16> {
-        // Lab 5 2.B
-        unimplemented!("mark_port")
+        let index: usize = ((port - 1) / 64).into();
+        let bit = (port - 1) % 64;
+        if self.port_map[index] & (1 << bit) != 0 {
+            None
+        } else {
+            self.port_map[index] |= 1 << bit;
+            Some(port)
+        }
     }
 
     /// Clears used bit of a port. Returns `Some(port)` on success, `None` on failure.
     pub fn erase_port(&mut self, port: u16) -> Option<u16> {
-        // Lab 5 2.B
-        unimplemented!("erase_port")
+        let index: usize = ((port - 1) / 64).into();
+        let bit = (port - 1) % 64;
+        if self.port_map[index] & (1 << bit) == 0 {
+            None
+        } else {
+            self.port_map[index] &= !(1 << bit);
+            Some(port)
+        }
     }
 
     /// Returns the first open port between the ephemeral port range 49152 ~ 65535.
     /// Note that this function does not mark the returned port.
     pub fn get_ephemeral_port(&mut self) -> Option<u16> {
-        // Lab 5 2.B
-        unimplemented!("get_ephemeral_port")
+        for port in 49152..=65535 {
+            let index: usize = ((port - 1) / 64).into();
+            let bit = (port - 1) % 64;
+            if self.port_map[index] & (1 << bit) == 0 {
+                return Some(port);
+            }
+        }
+        None
     }
 
     /// Finds a socket with a `SocketHandle`.
@@ -255,8 +292,13 @@ impl GlobalEthernetDriver {
     }
 
     pub fn poll(&self, timestamp: Instant) {
-        // Lab 5 2.B
-        unimplemented!("poll")
+        assert!(affinity() == 0);
+        assert!(get_preemptive_counter() == 1); // in Timer3, preemptive counter is 1 - the timer handler
+        self.0
+            .lock()
+            .as_mut()
+            .expect("Uninitialized EthernetDriver")
+            .poll(timestamp);
     }
 
     pub fn poll_delay(&self, timestamp: Instant) -> Duration {
@@ -273,6 +315,14 @@ impl GlobalEthernetDriver {
             .as_mut()
             .expect("Uninitialized EthernetDriver")
             .mark_port(port)
+    }
+
+    pub fn erase_port(&self, port: u16) -> Option<u16> {
+        self.0
+            .lock()
+            .as_mut()
+            .expect("Uninitialized EthernetDriver")
+            .erase_port(port)
     }
 
     pub fn get_ephemeral_port(&self) -> Option<u16> {
