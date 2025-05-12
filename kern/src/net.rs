@@ -317,14 +317,6 @@ impl GlobalEthernetDriver {
             .mark_port(port)
     }
 
-    pub fn erase_port(&self, port: u16) -> Option<u16> {
-        self.0
-            .lock()
-            .as_mut()
-            .expect("Uninitialized EthernetDriver")
-            .erase_port(port)
-    }
-
     pub fn get_ephemeral_port(&self) -> Option<u16> {
         self.0
             .lock()

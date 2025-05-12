@@ -36,14 +36,13 @@ mod shell;
 mod traps;
 mod vm;
 
-use aarch64::{disable_fiq_interrupt, enable_fiq_interrupt, with_fiq_enabled};
+use aarch64::with_fiq_enabled;
 use allocator::Allocator;
 use fs::FileSystem;
 use net::uspi::Usb;
 use net::GlobalEthernetDriver;
 use process::GlobalScheduler;
-use shell::shell;
-use traps::irq::{Fiq, GlobalIrq, LocalIrq};
+use traps::irq::{Fiq, GlobalIrq};
 use vm::VMManager;
 
 #[global_allocator]
@@ -95,7 +94,6 @@ unsafe fn kmain() -> ! {
         while !USB.is_eth_link_up() {}
         debug!("USB Ethernet link up");
     });
-    // shell("$");
     init::initialize_app_cores();
     per_core_main()
 }

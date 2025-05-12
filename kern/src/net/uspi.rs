@@ -225,21 +225,19 @@ pub unsafe fn ConnectInterrupt(
     let param_us = pParam as usize;    // store as integer ⇒ Send
 
     if nIRQ == Interrupt::Usb as u32 {
-        Controller::new().enable_fiq(Interrupt::Usb);
-
         FIQ.register((), Box::new(move |_tf: &mut TrapFrame| {
             if let Some(h) = handler {
                 h(param_us as *mut c_void);
             }
         }));
+        Controller::new().enable_fiq(Interrupt::Usb);
     } else {
-        Controller::new().enable(Interrupt::Timer3);
-
         GLOBAL_IRQ.register(Interrupt::Timer3, Box::new(move |_tf: &mut TrapFrame| {
             if let Some(h) = handler {
                 h(param_us as *mut c_void);
             }
         }));
+        Controller::new().enable(Interrupt::Timer3);
     }
 
     uspi_trace!(

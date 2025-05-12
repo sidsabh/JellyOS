@@ -49,21 +49,7 @@ pub struct Info {
 #[no_mangle]
 pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
 
-    // PRINT SP IF TPIDR isnt' max
-    let tpidr : u64;
-    unsafe {
-        core::arch::asm!("mrs {}, tpidr_el0", out(reg) tpidr);
-    }
-    let sp: u64;
-    unsafe {
-        core::arch::asm!("mov {}, sp", out(reg) sp);
-    }
-    if tpidr != core::usize::MAX as u64 {
-        trace!("SP: {:#x}, TPIDR: {:#x}", sp, tpidr);
-    }
-    
-
-    // trace!("info: {:#?}", info);
+    trace!("info: {:#?}", info);
     match info.kind {
         Kind::Synchronous if let Syndrome::Svc(num) = Syndrome::from(esr) => {
             trace!("tf: {:#?}", tf);
@@ -75,23 +61,9 @@ pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
             }
         }
         Kind::Synchronous => {
-            match Syndrome::from(esr) {
-                Syndrome::DataAbort { kind, level } => {
-                    unsafe {
-                        debug!("Fault addr: {:x}", FAR_EL1.get());
-                    }
-                },
-                Syndrome::PCAlignmentFault => {
-                    // PC alignment fault
-                    unsafe {
-                        debug!("PC alignment fault: {:x}", aarch64::ELR_EL1.get());
-                    }
-                }
-                _ => {}
+            unsafe {
+                debug!("[MAY BE INVALID] Fault addr: {:x}", FAR_EL1.get());
             }
-            // core
-            // Preferred Exception Return Address for synchronous
-            // is the address of instr that generated exception
             panic!("[core-{}] {:#?}, {}, {:#?}", affinity(), info, esr, Syndrome::from(esr));
             // info!("Unhandled exception: {:#?}, {:#?}", info, Syndrome::from(esr));
             // info!("TrapFrame: {:#x?}", tf);
@@ -121,7 +93,6 @@ pub extern "C" fn handle_exception(info: Info, esr: u32, tf: &mut TrapFrame) {
                 let local_controller = LocalController::new(affinity());
                 for i in LocalInterrupt::iter() {
                     if local_controller.is_pending(i) {
-                        // debug!("{:#?}, idx:{:#?} ", info, i);
                         unsafe {
                             aarch64::with_fiq_enabled(|| {
                                 local_irq().invoke(i, tf);

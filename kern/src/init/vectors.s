@@ -139,23 +139,54 @@ vec_context_restore:
     ldp     lr, xzr, [SP], #16
     eret
 .endm
-    
+
+// custom handler for nested FIQ in EL1 - don't switch stacks
+.macro FIQ_NESTED_HANDLER
+    .align 7
+    stp     lr, xzr, [SP, #-16]!
+    stp     x28, x29, [SP, #-16]!
+
+    mov     x29, #1 // sub in for HANDLER 1, 2
+    movk    x29, #2, LSL #16
+
+    bl      vec_context_save
+
+    mov     x0, x29            // Info
+    mrs     x1, ESR_EL1        // esr
+    mov     x2, SP             // TrapFrame pointer
+
+    bl      handle_exception
+
+    bl      vec_context_restore
+
+    ldp     x28, x29, [SP], #16
+    ldp     lr, xzr, [SP], #16
+    eret
+.endm
+
+
+// ===================
+// Vector table layout
+// ===================
 .align 11
 .global vectors
 vectors:
-    HANDLER 0, 0
-    HANDLER 0, 1
-    HANDLER 0, 2
-    HANDLER 0, 3
-    HANDLER 1, 0
-    HANDLER 1, 1
-    HANDLER 1, 2
-    HANDLER 1, 3
-    HANDLER 2, 0
-    HANDLER 2, 1
-    HANDLER 2, 2
-    HANDLER 2, 3
-    HANDLER 3, 0
-    HANDLER 3, 1
-    HANDLER 3, 2
-    HANDLER 3, 3
+    HANDLER 0, 0          // CurrentSP_EL0, Synchronous
+    HANDLER 0, 1          // CurrentSP_EL0, IRQ
+    HANDLER 0, 2          // CurrentSP_EL0, FIQ
+    HANDLER 0, 3          // CurrentSP_EL0, SError
+
+    HANDLER 1, 0          // CurrentSP_ELx, Synchronous
+    HANDLER 1, 1          // CurrentSP_ELx, IRQ
+    FIQ_NESTED_HANDLER
+    HANDLER 1, 3          // CurrentSP_ELx, SError
+
+    HANDLER 2, 0          // Lower AArch64, Synchronous
+    HANDLER 2, 1          // Lower AArch64, IRQ
+    HANDLER 2, 2          // Lower AArch64, FIQ
+    HANDLER 2, 3          // Lower AArch64, SError
+
+    HANDLER 3, 0          // Lower AArch32, Synchronous (usually unused)
+    HANDLER 3, 1          // Lower AArch32, IRQ
+    HANDLER 3, 2          // Lower AArch32, FIQ
+    HANDLER 3, 3          // Lower AArch32, SError

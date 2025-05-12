@@ -27,7 +27,7 @@ def load_target_dir():
         dst = vols + input("(input) > ").strip()
 
     if not os.path.isdir(dst):
-        print("[!] Please inesrt your sdcard (mounting point: %s)" % dst)
+        print("[!] Please insert your sdcard (mounting point: %s)" % dst)
         print("    waiting", end="", flush=True)
 
         while not os.path.isdir(dst):

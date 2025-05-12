@@ -141,7 +141,7 @@ impl Process {
         use aarch64::PState;
         let mut pstate = PState::new(0);
         pstate.set_value(0b1_u64, PState::F);
-        // pstate.set_value(0b1_u64, PState::I);
+        pstate.set_value(0b0_u64, PState::I); // enable interrupt
         pstate.set_value(0b1_u64, PState::A);
         pstate.set_value(0b1_u64, PState::D);
         pstate.set_value(0b000_u64, PState::M); // EL0
@@ -237,7 +237,7 @@ impl Process {
         use aarch64::PState;
         let mut pstate = PState::new(0);
         pstate.set_value(0b1_u64, PState::F);
-        // pstate.set_value(0b1_u64, PState::I);
+        pstate.set_value(0b0_u64, PState::I); // enable interrupt
         pstate.set_value(0b1_u64, PState::A);
         pstate.set_value(0b1_u64, PState::D);
         pstate.set_value(0b000_u64, PState::M); // EL0

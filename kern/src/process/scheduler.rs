@@ -139,7 +139,7 @@ impl GlobalScheduler {
         if id != u64::MAX {
             return; // block calls from syscall
         } else {
-            info!("No process to switch to, switching to idle");
+            trace!("No process to switch to, switching to idle");
             Self::idle_thread();
         }
     }
@@ -333,9 +333,9 @@ impl Scheduler {
         for (i, p) in self.processes.iter_mut().enumerate() {
             if p.context.tpidr == tf.tpidr {
                 p.state = State::Dead;
+                self.release_process_resources(tf);
                 let rproc = self.processes.remove(i).unwrap();
                 let pid = rproc.context.tpidr;
-                self.release_process_resources(tf);
                 drop(rproc); // Explicitly drop the process instance
                 return Some(pid);
             }
@@ -352,8 +352,11 @@ impl Scheduler {
         let process = self
             .processes
             .iter_mut()
-            .find(|p| p.context.tpidr == tf.tpidr)
-            .expect("No running process found");
+            .find(|p| p.context.tpidr == tf.tpidr);
+        if process.is_none() {
+            panic!("No process found");
+        }
+        let process = process.unwrap();
 
         let sockets = mem::take(&mut process.sockets);
 

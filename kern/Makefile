@@ -46,6 +46,7 @@ transmit: build
 	@echo "+ Transmitting build/$(KERN).bin to $(TTY_PATH)"
 	ttywrite -i build/$(KERN).bin $(TTY_PATH)
 	screen $(TTY_PATH) 115200
+	reset
 
 
 run: build

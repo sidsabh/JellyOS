@@ -26,7 +26,7 @@ fn main_inner() -> OsResult<!> {
         // Wait till a connection is available
         loop {
             let status = sock_status(sock)?;
-            if !status.can_send {
+            if status.can_send {
                 break;
             } else {
                 println!("Waiting for a connection...");

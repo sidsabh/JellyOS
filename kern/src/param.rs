@@ -28,7 +28,8 @@ pub const KERN_STACK_SIZE: usize = PAGE_SIZE;
 
 /// The `tick` time.
 #[cfg(feature = "transmit")]
-pub const TICK: Duration = Duration::from_millis(100);
+pub const TICK: Duration = Duration::from_millis(1);
+// pub const TICK: Duration = Duration::from_millis(100);
 #[cfg(not(feature = "transmit"))]
 pub const TICK: Duration = Duration::from_millis(1);
 

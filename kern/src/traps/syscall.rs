@@ -104,7 +104,7 @@ pub fn sys_sleep(ms: u32, tf: &mut TrapFrame) {
             let tf = &mut process.context;
             tf.regs[0] = (timer::current_time() - start).as_millis() as u64;
             tf.regs[7] = 1;
-            debug!(
+            trace!(
                 "Process {}: Woke up, current time: {:?}",
                 tf.tpidr,
                 timer::current_time()
@@ -279,53 +279,75 @@ pub fn sys_close(fd: usize, tf: &mut TrapFrame) {
 
     tf.regs[7] = result;
 }
-
+/// IMPORTANT: this is a blocking syscall. if the FD is the console, any other important tasks will be blocked until the syscall is complete.
 pub fn sys_read(fd: usize, va: usize, len: usize, tf: &mut TrapFrame) {
-    let (result, bytes_read) = SCHEDULER.with_current_process_mut(tf, |process| {
+    let handle = SCHEDULER.with_current_process_mut(tf, |process| {
         if fd >= process.files.len() || process.files[fd].is_none() {
-            return (OsError::InvalidFile as u64, 0);
+            return None;
         }
-
-        let buf = match unsafe { to_user_slice_mut(va, len) } {
-            Ok(slice) => slice,
-            Err(_) => return (OsError::BadAddress as u64, 0),
-        };
         let y = process.files[fd].as_mut().unwrap();
-        let handle = y.handle.clone(); // Clone the Arc (increases reference count)
-        let res = handle.lock().read(buf);
-
-        match res {
-            Ok(bytes) => (OsError::Ok as u64, bytes),
-            Err(_) => (OsError::IoError as u64, 0),
-        }
+        Some(y.handle.clone()) // Clone the Arc (increases reference count)
     });
 
-    tf.regs[0] = bytes_read as u64; // Set the return value **after** the closure
-    tf.regs[7] = result;
+    let buf = match unsafe { to_user_slice_mut(va, len) } {
+        Ok(slice) => slice,
+        Err(_) => {
+            tf.regs[7] = OsError::BadAddress as u64;
+            return;
+        }
+    };
+    let handle = match handle {
+        Some(handle) => handle,
+        None => {
+            tf.regs[7] = OsError::InvalidFile as u64;
+            return;
+        }
+    };
+    let res = handle.lock().read(buf);
+    match res {
+        Ok(bytes) => {
+            tf.regs[0] = bytes as u64; // Set the return value
+            tf.regs[7] = OsError::Ok as u64;
+        }
+        Err(_) => {
+            tf.regs[7] = OsError::IoError as u64;
+        },
+    }
 }
 
+/// IMPORTANT: this is a blocking syscall. if the FD is the console, any other important tasks will be blocked until the syscall is complete.
 pub fn sys_write(fd: usize, va: usize, len: usize, tf: &mut TrapFrame) {
-    let (result, bytes_written) = SCHEDULER.with_current_process_mut(tf, |process| {
+    let handle = SCHEDULER.with_current_process_mut(tf, |process| {
         if fd >= process.files.len() || process.files[fd].is_none() {
-            return (OsError::InvalidFile as u64, 0);
+            return None;
         }
-
-        let buf = match unsafe { to_user_slice(va, len) } {
-            Ok(slice) => slice,
-            Err(_) => return (OsError::BadAddress as u64, 0),
-        };
-
         let y = process.files[fd].as_mut().unwrap();
-        let handle = y.handle.clone(); // Clone the Arc (increases reference count)
-        let res = handle.lock().write(buf);
-        match res {
-            Ok(bytes) => (OsError::Ok as u64, bytes),
-            Err(_) => (OsError::IoError as u64, 0),
-        }
+        Some(y.handle.clone()) // Clone the Arc (increases reference count)
     });
-
-    tf.regs[0] = bytes_written as u64;
-    tf.regs[7] = result;
+    let buf = match unsafe { to_user_slice(va, len) } {
+        Ok(slice) => slice,
+        Err(_) => {
+            tf.regs[7] = OsError::BadAddress as u64;
+            return;
+        }
+    };
+    let handle = match handle {
+        Some(handle) => handle,
+        None => {
+            tf.regs[7] = OsError::InvalidFile as u64;
+            return;
+        }
+    };
+    let res = handle.lock().write(buf);
+    match res {
+        Ok(bytes) => {
+            tf.regs[0] = bytes as u64; // Set the return value
+            tf.regs[7] = OsError::Ok as u64;
+        }
+        Err(_) => {
+            tf.regs[7] = OsError::IoError as u64;
+        },
+    }
 }
 
 pub fn sys_seek(fd: usize, offset: usize, tf: &mut TrapFrame) {
