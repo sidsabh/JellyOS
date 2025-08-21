@@ -193,10 +193,11 @@ impl GlobalScheduler {
     pub fn initialize_global_timer_interrupt(&'static self) {
         // use pi::interrupt::{Controller, Interrupt};
         // Controller::new().enable(Interrupt::Timer1);
-        USB.start_kernel_timer(
-            Duration::from_millis(1000),
-            Some(poll_ethernet),
-        );
+
+        // USB.start_kernel_timer(
+        //     Duration::from_millis(1000),
+        //     Some(poll_ethernet),
+        // );
 
     }
 
@@ -360,22 +361,22 @@ impl Scheduler {
 
         let sockets = mem::take(&mut process.sockets);
 
-        for handle in sockets {
-            ETHERNET.critical(|eth| {
-                let port = {
-                    let mut sock = eth.get_socket(handle);
-                    let endpoint = sock.local_endpoint().port;
-                    if sock.is_open() {
-                        sock.close();
-                    }
-                    endpoint
-                };
-                eth.erase_port(port);
-                eth.release(handle);
-            });
-        }
+        // for handle in sockets {
+        //     ETHERNET.critical(|eth| {
+        //         let port = {
+        //             let mut sock = eth.get_socket(handle);
+        //             let endpoint = sock.local_endpoint().port;
+        //             if sock.is_open() {
+        //                 sock.close();
+        //             }
+        //             endpoint
+        //         };
+        //         eth.erase_port(port);
+        //         eth.release(handle);
+        //     });
+        // }
 
-        ETHERNET.critical(|eth| eth.prune());
+        // ETHERNET.critical(|eth| eth.prune());
     }
 
     /// Finds a process corresponding with tpidr saved in a trap frame.

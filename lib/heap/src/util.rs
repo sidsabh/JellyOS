@@ -11,7 +11,7 @@ pub fn align_down(addr: usize, align: usize) -> usize {
         panic!("align is not a power of two");
     }
     
-    let align_minus_one = align.checked_sub(1).expect("align overflow");
+    let align_minus_one = align.checked_sub(1).expect("align underflow");
     addr & !align_minus_one
 }
 
@@ -28,7 +28,7 @@ pub fn align_up(addr: usize, align: usize) -> usize {
         panic!("align is not a power of two");
     }
     
-    let align_minus_one = align.checked_sub(1).expect("align overflow");
+    let align_minus_one = align.checked_sub(1).expect("align underflow");
     addr.checked_add(align_minus_one)
         .expect("align overflow")
         & !align_minus_one

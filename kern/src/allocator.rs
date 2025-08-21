@@ -30,7 +30,7 @@ impl Allocator {
     ///
     /// Panics if the system's memory map could not be retrieved.
     pub unsafe fn initialize(&self) {
-        let (start, end) = memory_map().expect("failed to get memory map");
+        let (start, end) = memory_map();
         info!("heap beg: {:016x}, end: {:016x}", start, end);
         *self.0.lock() = Some(AllocatorImpl::new(start, end));
     }
@@ -76,7 +76,7 @@ impl fmt::Debug for Allocator {
 /// system if it can be determined. If it cannot, `None` is returned.
 ///
 /// This function is expected to return `Some` under all normal cirumstances.
-pub fn memory_map() -> Option<(usize, usize)> {
+pub fn memory_map() -> (usize, usize) {
     
     let page_size: usize = 1 << 12;
     let mut binary_end = unsafe { (&__text_end as *const u8) as usize };
@@ -85,9 +85,9 @@ pub fn memory_map() -> Option<(usize, usize)> {
     match atags.find(|tag| tag.mem().is_some()) {
         Some(atag) => {
             let mem = atag.mem().unwrap();
-            Some((binary_end, (mem.size as usize) - binary_end))
+            (binary_end, (mem.size as usize) - binary_end)
         },
-        None => Some((1000000, 994050048)) // atags not appearing for QEMU fix
+        None => (1000000, 994050048) // atags not appearing for QEMU fix
         // None => None // correct code
     }
 

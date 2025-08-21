@@ -322,12 +322,14 @@ impl Process {
     pub fn is_ready(&mut self) -> bool {
         let state = core::mem::replace(&mut self.state, State::Dead); // Temporarily remove state
 
-        if let State::Waiting(mut f) = state {
-            if let Some(func) = f.as_mut() && func(self) {
+        if let State::Waiting(Some(mut f)) = state {
+            if f(self)
+            {
                 self.state = State::Ready;
                 return true;
-            } else {
-                self.state = State::Waiting(f); // Restore the waiting state
+            }
+            else {
+                self.state = State::Waiting(Some(f));
                 return false;
             }
         }

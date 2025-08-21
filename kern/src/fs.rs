@@ -1,6 +1,6 @@
 pub mod sd;
 
-use alloc::rc::Rc;
+use alloc::sync::Arc;
 use core::fmt::{self, Debug};
 use shim::io;
 use shim::path::Path;
@@ -11,15 +11,13 @@ use fat32::vfat::{Dir, Entry as EntryStruct, File, VFat, VFatHandle};
 use crate::mutex::Mutex;
 
 #[derive(Clone)]
-pub struct PiVFatHandle(Rc<Mutex<VFat<Self>>>);
+pub struct PiVFatHandle(Arc<Mutex<VFat<Self>>>);
 
 // These impls are *unsound*. We should use `Arc` instead of `Rc` to implement
 // `Sync` and `Send` trait for `PiVFatHandle`. However, `Arc` uses atomic memory
 // access, which requires MMU to be initialized on ARM architecture. Since we
 // have enabled only one core of the board, these unsound impls will not cause
 // any immediate harm for now. We will fix this in the future.
-unsafe impl Send for PiVFatHandle {}
-unsafe impl Sync for PiVFatHandle {}
 
 impl Debug for PiVFatHandle {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
@@ -29,7 +27,7 @@ impl Debug for PiVFatHandle {
 
 impl VFatHandle for PiVFatHandle {
     fn new(val: VFat<PiVFatHandle>) -> Self {
-        PiVFatHandle(Rc::new(Mutex::new(val)))
+        PiVFatHandle(Arc::new(Mutex::new(val)))
     }
 
     fn lock<R>(&self, f: impl FnOnce(&mut VFat<PiVFatHandle>) -> R) -> R {

@@ -2,7 +2,6 @@
 #![no_main]
 
 // extra features
-#![feature(naked_functions)]
 #![allow(internal_features)]
 #![feature(ptr_internals)]
 #![feature(raw_vec_internals)]
@@ -10,7 +9,6 @@
 #![feature(decl_macro)]
 #![feature(auto_traits)]
 #![feature(negative_impls)]
-#![feature(let_chains)]
 #![feature(iter_chain)]
 #![feature(if_let_guard)]
 #![feature(array_chunks)]
@@ -32,7 +30,6 @@ mod net;
 mod param;
 mod percore;
 mod process;
-mod shell;
 mod traps;
 mod vm;
 
@@ -87,13 +84,13 @@ unsafe fn kmain() -> ! {
     SCHEDULER.initialize();
     
     // Network initialization
-    with_fiq_enabled(|| {
-        USB.initialize();
-        ETHERNET.initialize();
-        assert!(USB.is_eth_available(), "USB Ethernet not available");
-        while !USB.is_eth_link_up() {}
-        debug!("USB Ethernet link up");
-    });
+    // with_fiq_enabled(|| {
+    //     USB.initialize();
+    //     ETHERNET.initialize();
+    //     assert!(USB.is_eth_available(), "USB Ethernet not available");
+    //     while !USB.is_eth_link_up() {}
+    //     debug!("USB Ethernet link up");
+    // });
     init::initialize_app_cores();
     per_core_main()
 }

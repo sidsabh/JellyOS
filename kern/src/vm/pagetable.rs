@@ -223,7 +223,7 @@ impl KernPageTable {
         let mut kpt = KernPageTable(PageTable::new(EntryPerm::KERN_RW));
 
         let start: usize = 0x0;
-        let (_, end): (usize, usize) = memory_map().expect("failed to load memory map");
+        let (_, end): (usize, usize) = memory_map();
 
         use alloc::vec::Vec;
 

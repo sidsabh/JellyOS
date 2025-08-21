@@ -10,7 +10,7 @@ use crate::traps::TrapFrame;
 
 // Programmer Guide Chapter 10
 // AArch64 Exception Handling
-pub type IrqHandler = Box<dyn FnMut(&mut TrapFrame) + Send>;
+pub type IrqHandler = Box<dyn Fn(&mut TrapFrame) + Send>;
 type IrqHandlerMutex = Mutex<Option<IrqHandler>>;
 
 type GlobalIrqHandlers = [IrqHandlerMutex; Interrupt::MAX];
